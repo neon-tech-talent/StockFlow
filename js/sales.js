@@ -4,18 +4,59 @@ const SalesModule = {
     selectedClientId: null,
     selectedClientName: null,
 
+    historyMonth: new Date().getMonth(),
+    historyYear: new Date().getFullYear(),
+
     async renderHistory(el) {
-        const sales = await DB.getSales();
+        const allSales = await DB.getSales();
+        const filtered = allSales.filter(s => {
+            const d = new Date(s.created_at);
+            return d.getMonth() === this.historyMonth && d.getFullYear() === this.historyYear;
+        });
+
+        const totals = { efectivo: 0, transferencia: 0, cuenta_corriente: 0, qr: 0, debito: 0, credito: 0 };
+        filtered.filter(s => !s.voided).forEach(s => {
+            if (totals[s.payment_type] !== undefined) totals[s.payment_type] += parseFloat(s.total || 0);
+        });
+
         el.innerHTML = `
       <div class="module-header">
         <h2 class="card-title">Histórico de Ventas</h2>
-        <button class="btn btn-primary" onclick="App.go('new-sale')">+ Nueva Venta</button>
+        <div style="display:flex; gap:.5rem">
+           <select class="form-input" onchange="SalesModule.setHistoryFilter(this.value, null)">
+             ${Array.from({ length: 12 }, (_, i) => `<option value="${i}" ${i === this.historyMonth ? 'selected' : ''}>${new Date(2000, i).toLocaleString('es', { month: 'long' })}</option>`).join('')}
+           </select>
+           <select class="form-input" onchange="SalesModule.setHistoryFilter(null, this.value)">
+             ${[2024, 2025, 2026].map(y => `<option value="${y}" ${y === this.historyYear ? 'selected' : ''}>${y}</option>`).join('')}
+           </select>
+           <button class="btn btn-primary" onclick="App.go('new-sale')">+ Nueva Venta</button>
+        </div>
       </div>
+
+      <div class="kpi-row" style="margin-bottom: 1.5rem">
+        <div class="kpi-card" style="border-left: 4px solid var(--accent)">
+            <div class="kpi-label">Efectivo</div>
+            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.efectivo)}</div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #3b82f6">
+            <div class="kpi-label">Transf / QR</div>
+            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.transferencia + totals.qr)}</div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #ef4444">
+            <div class="kpi-label">Tarjetas (D+C)</div>
+            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.debito + totals.credito)}</div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #10b981">
+            <div class="kpi-label">Cta. Corriente</div>
+            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.cuenta_corriente)}</div>
+        </div>
+      </div>
+
       <div class="card">
         <table class="data-table">
           <thead><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pago</th><th>Estado</th><th>Acciones</th></tr></thead>
           <tbody>
-            ${sales.map(s => `
+            ${filtered.map(s => `
               <tr class="${s.voided ? 'row-voided' : ''}">
                 <td>#${s.id.slice(-4)}</td>
                 <td>${new Date(s.created_at).toLocaleString('es')}</td>
@@ -28,10 +69,16 @@ const SalesModule = {
                   ${!s.voided ? `<button class="btn-icon danger" title="Anular" onclick="SalesModule.voidSale('${s.id}')">🚫</button>` : ''}
                 </td>
               </tr>
-            `).join('') || '<tr><td colspan="7" class="empty-state">No hay ventas registradas</td></tr>'}
+            `).join('') || '<tr><td colspan="7" class="empty-state">No hay ventas registradas en este período</td></tr>'}
           </tbody>
         </table>
       </div>`;
+    },
+
+    async setHistoryFilter(m, y) {
+        if (m !== null) this.historyMonth = parseInt(m);
+        if (y !== null) this.historyYear = parseInt(y);
+        await this.renderHistory(document.getElementById('content'));
     },
 
     async viewSale(id) {
