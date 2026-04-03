@@ -1,69 +1,80 @@
 const supabaseUrl = window.SUPABASE_URL || '';
 const supabaseKey = window.SUPABASE_KEY || '';
-const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+let _supabase = null;
+try {
+  if (supabaseUrl && supabaseKey) {
+    _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+  }
+} catch(e) { console.error("Error init Supabase:", e); }
 
 const DB = {
+  get client() {
+    if (!_supabase) alert("Error: Base de datos no configurada en Vercel.");
+    return _supabase;
+  },
+
   /* ── CATEGORIES ── */
   async getCategories() {
-    const { data } = await _supabase.from('categories').select('*').order('name');
+    const { data } = await this.client.from('categories').select('*').order('name');
     return data || [];
   },
   async saveCategory(cat) {
-    if (cat.id) await _supabase.from('categories').update({ name: cat.name }).eq('id', cat.id);
-    else await _supabase.from('categories').insert({ name: cat.name });
+    if (cat.id) await this.client.from('categories').update({ name: cat.name }).eq('id', cat.id);
+    else await this.client.from('categories').insert({ name: cat.name });
   },
   async deleteCategory(id) {
     // Check if products use it
-    const { count } = await _supabase.from('products').select('*', { count: 'exact', head: true }).eq('category_id', id);
+    const { count } = await this.client.from('products').select('*', { count: 'exact', head: true }).eq('category_id', id);
     if (count > 0) return false;
-    await _supabase.from('categories').delete().eq('id', id);
+    await this.client.from('categories').delete().eq('id', id);
     return true;
   },
 
   /* ── PRODUCTS ── */
   async getProducts() {
-    const { data } = await _supabase.from('products').select('*').order('name');
+    const { data } = await this.client.from('products').select('*').order('name');
     return data || [];
   },
   async saveProduct(p) {
     const obj = { name: p.name, category_id: p.categoryId || null, sell_price: p.sellPrice, cost_price: p.costPrice, stock: p.stock };
-    if (p.id) await _supabase.from('products').update(obj).eq('id', p.id);
-    else await _supabase.from('products').insert(obj);
+    if (p.id) await this.client.from('products').update(obj).eq('id', p.id);
+    else await this.client.from('products').insert(obj);
   },
-  async deleteProduct(id) { await _supabase.from('products').delete().eq('id', id); },
+  async deleteProduct(id) { await this.client.from('products').delete().eq('id', id); },
   async adjustStock(id, delta) {
-    const { data } = await _supabase.from('products').select('stock').eq('id', id).single();
-    if (data) await _supabase.from('products').update({ stock: data.stock + delta }).eq('id', id);
+    const { data } = await this.client.from('products').select('stock').eq('id', id).single();
+    if (data) await this.client.from('products').update({ stock: data.stock + delta }).eq('id', id);
   },
 
   /* ── CLIENTS ── */
   async getClients() {
-    const { data } = await _supabase.from('clients').select('*').order('name');
+    const { data } = await this.client.from('clients').select('*').order('name');
     return data || [];
   },
   async saveClient(c) {
     const obj = { name: c.name, phone: c.phone, email: c.email, balance: c.balance || 0 };
-    if (c.id) await _supabase.from('clients').update(obj).eq('id', c.id);
-    else await _supabase.from('clients').insert(obj);
+    if (c.id) await this.client.from('clients').update(obj).eq('id', c.id);
+    else await this.client.from('clients').insert(obj);
   },
   async updateBalance(id, delta) {
-    const { data } = await _supabase.from('clients').select('balance').eq('id', id).single();
-    if (data) await _supabase.from('clients').update({ balance: parseFloat(data.balance) + delta }).eq('id', id);
+    const { data } = await this.client.from('clients').select('balance').eq('id', id).single();
+    if (data) await this.client.from('clients').update({ balance: parseFloat(data.balance) + delta }).eq('id', id);
   },
 
   /* ── SALES ── */
   async getSales() {
-    const { data } = await _supabase.from('sales').select('*').order('created_at', { ascending: false });
+    const { data } = await this.client.from('sales').select('*').order('created_at', { ascending: false });
     return data || [];
   },
   async getSaleItems(saleId) {
-    let q = _supabase.from('sale_items').select('*');
+    let q = this.client.from('sale_items').select('*');
     if (saleId) q = q.eq('sale_id', saleId);
     const { data } = await q;
     return data || [];
   },
   async saveSale(sale, items) {
-    const { data: sData, error } = await _supabase.from('sales').insert({
+    const { data: sData, error } = await this.client.from('sales').insert({
       total: sale.total, payment_type: sale.paymentType, client_id: sale.clientId, client_name: sale.clientName
     }).select().single();
 
@@ -74,7 +85,7 @@ const DB = {
       sale_id: saleId, product_id: it.productId, product_name: it.productName,
       quantity: it.quantity, unit_price: it.unitPrice
     }));
-    await _supabase.from('sale_items').insert(itemsToInsert);
+    await this.client.from('sale_items').insert(itemsToInsert);
 
     // Stock & Account & Cash
     for (const it of items) { await this.adjustStock(it.productId, -it.quantity); }
@@ -88,13 +99,13 @@ const DB = {
     return saleId;
   },
   async voidSale(saleId) {
-    const { data: sale } = await _supabase.from('sales').select('*').eq('id', saleId).single();
+    const { data: sale } = await this.client.from('sales').select('*').eq('id', saleId).single();
     if (!sale || sale.voided) return false;
 
     const items = await this.getSaleItems(saleId);
     for (const it of items) { if (it.product_id) await this.adjustStock(it.product_id, it.quantity); }
 
-    await _supabase.from('sales').update({ voided: true }).eq('id', saleId);
+    await this.client.from('sales').update({ voided: true }).eq('id', saleId);
 
     if (sale.payment_type === 'cuenta_corriente' && sale.client_id) {
       await this.addMovement({ client_id: sale.client_id, sale_id: saleId, amount: -sale.total, type: 'anulacion', notes: 'Anulación' });
@@ -108,12 +119,12 @@ const DB = {
 
   /* ── ACCOUNT MOVEMENTS ── */
   async getMovements(clientId) {
-    let q = _supabase.from('account_movements').select('*');
+    let q = this.client.from('account_movements').select('*');
     if (clientId) q = q.eq('client_id', clientId);
     const { data } = await q.order('created_at', { ascending: false });
     return data || [];
   },
-  async addMovement(mov) { await _supabase.from('account_movements').insert(mov); },
+  async addMovement(mov) { await this.client.from('account_movements').insert(mov); },
   async registerPayment(clientId, amount, notes, method) {
     await this.addMovement({ client_id: clientId, amount: -amount, type: 'pago', notes: notes || 'Pago CC' });
     if (method === 'efectivo') {
@@ -124,25 +135,25 @@ const DB = {
 
   /* ── SUPPLIES ── */
   async getSupplies() {
-    const { data } = await _supabase.from('supplies').select('*').order('name');
+    const { data } = await this.client.from('supplies').select('*').order('name');
     return data || [];
   },
   async saveSupply(s) {
     const obj = { name: s.name, stock: s.stock, unit: s.unit };
-    if (s.id) await _supabase.from('supplies').update(obj).eq('id', s.id);
-    else await _supabase.from('supplies').insert(obj);
+    if (s.id) await this.client.from('supplies').update(obj).eq('id', s.id);
+    else await this.client.from('supplies').insert(obj);
   },
-  async deleteSupply(id) { await _supabase.from('supplies').delete().eq('id', id); },
+  async deleteSupply(id) { await this.client.from('supplies').delete().eq('id', id); },
   async adjustSupplyStock(id, delta) {
-    const { data } = await _supabase.from('supplies').select('stock').eq('id', id).single();
-    if (data) await _supabase.from('supplies').update({ stock: (data.stock || 0) + delta }).eq('id', id);
+    const { data } = await this.client.from('supplies').select('stock').eq('id', id).single();
+    if (data) await this.client.from('supplies').update({ stock: (data.stock || 0) + delta }).eq('id', id);
   },
   async getDeductions() {
-    const { data } = await _supabase.from('supply_deductions').select('*').order('created_at', { ascending: false });
+    const { data } = await this.client.from('supply_deductions').select('*').order('created_at', { ascending: false });
     return data || [];
   },
   async saveDeduction(ded) {
-    await _supabase.from('supply_deductions').insert({
+    await this.client.from('supply_deductions').insert({
       supply_id: ded.productId, supply_name: ded.productName, quantity: ded.quantity, reason: ded.reason
     });
     await this.adjustSupplyStock(ded.productId, -ded.quantity);
@@ -150,24 +161,24 @@ const DB = {
 
   /* ── EXPENSES ── */
   async getExpenses() {
-    const { data } = await _supabase.from('expenses').select('*').order('date', { ascending: false });
+    const { data } = await this.client.from('expenses').select('*').order('date', { ascending: false });
     return data || [];
   },
   async saveExpense(e) {
     const obj = { concept: e.concept, amount: e.amount, date: e.date };
-    if (e.id) await _supabase.from('expenses').update(obj).eq('id', e.id);
-    else await _supabase.from('expenses').insert(obj);
+    if (e.id) await this.client.from('expenses').update(obj).eq('id', e.id);
+    else await this.client.from('expenses').insert(obj);
   },
-  async deleteExpense(id) { await _supabase.from('expenses').delete().eq('id', id); },
+  async deleteExpense(id) { await this.client.from('expenses').delete().eq('id', id); },
 
   /* ── CASH MOVEMENTS ── */
   async getCashMovements() {
-    const { data } = await _supabase.from('cash_movements').select('*').order('created_at', { ascending: false });
+    const { data } = await this.client.from('cash_movements').select('*').order('created_at', { ascending: false });
     return data || [];
   },
-  async saveCashMovement(mv) { await _supabase.from('cash_movements').insert(mv); },
+  async saveCashMovement(mv) { await this.client.from('cash_movements').insert(mv); },
   async getCashTotal() {
-    const { data } = await _supabase.from('cash_movements').select('amount');
+    const { data } = await this.client.from('cash_movements').select('amount');
     return (data || []).reduce((sum, m) => sum + parseFloat(m.amount), 0);
   },
 
@@ -177,11 +188,11 @@ const DB = {
     const cm = m ?? now.getMonth(), cy = y ?? now.getFullYear();
     
     // For simplicity, we fetch mostly everything needed or do grouped queries
-    const { data: sales } = await _supabase.from('sales').select('*').eq('voided', false);
-    const { data: items } = await _supabase.from('sale_items').select('*');
-    const { data: prods } = await _supabase.from('products').select('*');
-    const { data: expenses } = await _supabase.from('expenses').select('*');
-    const { data: clients } = await _supabase.from('clients').select('*');
+    const { data: sales } = await this.client.from('sales').select('*').eq('voided', false);
+    const { data: items } = await this.client.from('sale_items').select('*');
+    const { data: prods } = await this.client.from('products').select('*');
+    const { data: expenses } = await this.client.from('expenses').select('*');
+    const { data: clients } = await this.client.from('clients').select('*');
 
     const monthlySales = (sales || []).filter(s => { const d = new Date(s.created_at); return d.getMonth() === cm && d.getFullYear() === cy; });
     const yearlySales  = (sales || []).filter(s => new Date(s.created_at).getFullYear() === cy);
@@ -235,4 +246,5 @@ const DB = {
       topProfitable: Object.values(prodProfit).sort((a,b) => b.profit - a.profit).slice(0,5)
     };
   }
+
 };

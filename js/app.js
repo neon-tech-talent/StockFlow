@@ -12,6 +12,7 @@ const App = {
         document.getElementById('page-title').textContent = titles[page] || page;
         document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', (n.dataset.page === page || n.id === 'nav-'+page)));
         const content = document.getElementById('content');
+        content.innerHTML = '<div class="empty-state">Cargando...</div>';
         StatsModule._destroyCharts?.();
         switch (page) {
             case 'stock': await StockModule.render(content); break;
