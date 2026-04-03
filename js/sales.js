@@ -158,7 +158,56 @@ const SalesModule = {
         const res = document.getElementById('cl-results');
         if (q.length < 2) { res.innerHTML = ''; return; }
         const data = (await DB.getClients()).filter(c => c.name.toLowerCase().includes(q.toLowerCase()));
-        res.innerHTML = data.map(c => `<div class="client-chip" onclick="SalesModule.selectClient('${c.id}', '${Utils.escHtml(c.name)}')">${Utils.escHtml(c.name)}</div>`).join('');
+        if (data.length > 0) {
+            res.innerHTML = data.map(c => `<div class="client-chip" onclick="SalesModule.selectClient('${c.id}', '${Utils.escHtml(c.name)}')">${Utils.escHtml(c.name)}</div>`).join('');
+        } else {
+            res.innerHTML = `
+              <div class="client-chip text-muted" style="font-style:italic; cursor:default;">Sin resultados para "${Utils.escHtml(q)}"</div>
+              <div class="client-chip" style="border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="SalesModule.openNewClientModal('${Utils.escHtml(q)}')">
+                ➕ Agregar "${Utils.escHtml(q)}" como nuevo cliente
+              </div>`;
+        }
+    },
+
+    openNewClientModal(prefillName = '') {
+        Modal.open(`
+      <h2 class="modal-title">➕ Nuevo Cliente</h2>
+      <form onsubmit="SalesModule.saveNewClientInline(event)">
+        <div class="form-group">
+          <label>Nombre *</label>
+          <input id="nc-name" name="name" class="form-input" required value="${Utils.escHtml(prefillName)}" placeholder="Nombre completo">
+        </div>
+        <div class="form-group">
+          <label>Teléfono</label>
+          <input id="nc-phone" name="phone" class="form-input" placeholder="Opcional">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input id="nc-email" name="email" class="form-input" type="email" placeholder="Opcional">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar y Seleccionar</button>
+        </div>
+      </form>`);
+    },
+
+    async saveNewClientInline(e) {
+        e.preventDefault();
+        const name  = document.getElementById('nc-name').value.trim();
+        const phone = document.getElementById('nc-phone').value.trim();
+        const email = document.getElementById('nc-email').value.trim();
+
+        await DB.saveClient({ name, phone, email, balance: 0 });
+
+        // Find the newly created client to get its ID
+        const all = await DB.getClients();
+        const newClient = all.find(c => c.name === name);
+
+        Modal.close();
+        if (newClient) {
+            this.selectClient(newClient.id, newClient.name);
+        }
     },
 
     selectClient(id, name) {

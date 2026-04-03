@@ -1,0 +1,4 @@
+{
+  "buildCommand": "echo \"window.SUPABASE_URL = '$VITE_SUPABASE_URL'; window.SUPABASE_KEY = '$VITE_SUPABASE_KEY';\" > js/env.js",
+  "outputDirectory": "."
+}
