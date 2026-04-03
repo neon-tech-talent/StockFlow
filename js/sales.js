@@ -101,8 +101,8 @@ const SalesModule = {
               <button class="pay-btn" id="pay-tran" onclick="SalesModule.setPayment('transferencia')">📱 <span>Transf.</span></button>
               <button class="pay-btn" id="pay-cuen" onclick="SalesModule.setPayment('cuenta_corriente')">📒 <span>Cta. Cte.</span></button>
               <button class="pay-btn" id="pay-qr__" onclick="SalesModule.setPayment('qr')">🔳 <span>QR</span></button>
-              <button class="pay-btn" id="pay-debi" onclick="SalesModule.setPayment('debito')">💳 <span>Débito</span></button>
-              <button class="pay-btn" id="pay-cred" onclick="SalesModule.setPayment('credito')">💳 <span>Crédito</span></button>
+              <button class="pay-btn" id="pay-debi" onclick="SalesModule.setPayment('debito')">💳 <span>Tarjeta de Débito</span></button>
+              <button class="pay-btn" id="pay-cred" onclick="SalesModule.setPayment('credito')">💳 <span>Tarjeta de Crédito</span></button>
             </div>
           </div>
           <div class="total-card">
