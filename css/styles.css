@@ -56,8 +56,24 @@ body {
   border-bottom: 1px solid var(--border);
   text-align: center;
 }
-.sidebar-logo img { width: 80px; margin-bottom: .5rem; filter: drop-shadow(0 2px 8px rgba(200,169,110,0.3)); }
-.sidebar-logo h1 { font-family: 'Playfair Display', serif; font-size: 1rem; color: var(--accent); line-height: 1.2; }
+.sidebar-logo img { 
+  width: 90px; 
+  height: 90px; 
+  object-fit: cover; 
+  border-radius: 50%; 
+  border: 1px solid var(--accent-dim); 
+  padding: 4px; 
+  background: var(--bg-main); /* Matches sidebar background */
+  margin-bottom: .8rem; 
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4); 
+}
+.sidebar-logo h1 { 
+  font-family: 'Playfair Display', serif; 
+  font-size: 1rem; 
+  color: var(--accent); 
+  line-height: 1.2; 
+  letter-spacing: 0.1em;
+}
 
 .sidebar-nav { padding: .75rem 0; flex: 1; }
 .nav-item {
