@@ -174,10 +174,24 @@ const SalesModule = {
       </div>`).join('') || '<div class="empty-state">Sin resultados</div>';
     },
 
-    addToCart(id, name, price) {
+    async addToCart(id, name, price) {
+        const prod = (await DB.getProducts()).find(p => p.id === id);
+        const stock = prod ? prod.stock : 0;
         const exist = this.cart.find(x => x.productId === id);
-        if (exist) exist.quantity++;
-        else this.cart.push({ productId: id, productName: name, unitPrice: price, quantity: 1 });
+        
+        if (exist) {
+            if (exist.quantity + 1 > stock) {
+                alert(`No hay stock suficiente de ${name}. Stock disponible: ${stock}`);
+                return;
+            }
+            exist.quantity++;
+        } else {
+            if (stock < 1) {
+                alert(`No hay stock disponible de ${name}`);
+                return;
+            }
+            this.cart.push({ productId: id, productName: name, unitPrice: price, quantity: 1, maxStock: stock });
+        }
         this._renderCart();
     },
 
@@ -185,7 +199,13 @@ const SalesModule = {
 
     updateQty(idx, val) {
         const q = parseInt(val);
-        if (q > 0) this.cart[idx].quantity = q;
+        const item = this.cart[idx];
+        if (q > item.maxStock) {
+            alert(`Stock insuficiente. Solo quedan ${item.maxStock} unidades.`);
+            this._renderCart(); // Re-render to reset value in input
+            return;
+        }
+        if (q > 0) item.quantity = q;
         else this.cart.splice(idx, 1);
         this._renderCart();
     },
