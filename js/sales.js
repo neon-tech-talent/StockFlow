@@ -97,9 +97,12 @@ const SalesModule = {
             </div>
             <label class="card-title" style="display:block;margin-bottom:.5rem">Medio de Pago</label>
             <div class="payment-grid">
-              <button class="pay-btn active" id="pay-cash" onclick="SalesModule.setPayment('efectivo')">💵 <span>Efectivo</span></button>
-              <button class="pay-btn" id="pay-trans" onclick="SalesModule.setPayment('transferencia')">📱 <span>Transf.</span></button>
-              <button class="pay-btn" id="pay-cc" onclick="SalesModule.setPayment('cuenta_corriente')">📒 <span>Cta. Cte.</span></button>
+              <button class="pay-btn active" id="pay-efec" onclick="SalesModule.setPayment('efectivo')">💵 <span>Efectivo</span></button>
+              <button class="pay-btn" id="pay-tran" onclick="SalesModule.setPayment('transferencia')">📱 <span>Transf.</span></button>
+              <button class="pay-btn" id="pay-cuen" onclick="SalesModule.setPayment('cuenta_corriente')">📒 <span>Cta. Cte.</span></button>
+              <button class="pay-btn" id="pay-qr__" onclick="SalesModule.setPayment('qr')">🔳 <span>QR</span></button>
+              <button class="pay-btn" id="pay-debi" onclick="SalesModule.setPayment('debito')">💳 <span>Débito</span></button>
+              <button class="pay-btn" id="pay-cred" onclick="SalesModule.setPayment('credito')">💳 <span>Crédito</span></button>
             </div>
           </div>
           <div class="total-card">
@@ -223,7 +226,10 @@ const SalesModule = {
 
     setPayment(type) {
         this.paymentType = type;
-        document.querySelectorAll('.pay-btn').forEach(b => b.classList.toggle('active', b.id === `pay-${type.slice(0, 4)}`));
+        const map = { efectivo: 'pay-efec', transferencia: 'pay-tran', cuenta_corriente: 'pay-cuen', qr: 'pay-qr__', debito: 'pay-debi', credito: 'pay-cred' };
+        document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('active'));
+        const btn = document.getElementById(map[type]);
+        if (btn) btn.classList.add('active');
     },
 
     async confirmSale() {
