@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StockFlow — Control de Inventario</title>
+  <meta name="description" content="Sistema de control de stock, ventas y estadísticas para Entre Raices">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Supabase & Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="logo.png" alt="StockFlow" onerror="this.style.display='none'">
+      <h1>StockFlow<br><small style="font-size: 0.75rem; color: var(--accent-dim);">Control de Inventario</small></h1>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-item" id="nav-stock" onclick="location.hash='#stock'"><span class="nav-icon">📦</span><span>Stock</span></div>
+      <div class="nav-item" id="nav-caja" onclick="location.hash='#caja'"><span class="nav-icon">💸</span><span>Caja</span></div>
+      <div class="nav-item" id="nav-sales" onclick="location.hash='#sales'"><span class="nav-icon">📜</span><span>Ventas</span></div>
+      <div class="nav-item" data-page="new-sale" onclick="App.go('new-sale')">
+        <span class="nav-icon">➕</span><span>Nueva Venta</span>
+      </div>
+      <div class="nav-item" data-page="clients" onclick="App.go('clients')">
+        <span class="nav-icon">👥</span><span>Clientes</span>
+      </div>
+      <div class="nav-item" data-page="stats" onclick="App.go('stats')">
+        <span class="nav-icon">📊</span><span>Estadísticas</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">StockFlow © 2025</div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main-wrap">
+    <header class="topbar">
+      <h2 id="page-title">Gestión de Stock</h2>
+    </header>
+    <main id="content"></main>
+  </div>
+
+  <!-- Modal overlay (filled dynamically) -->
+  <div id="modal-overlay"></div>
+
+  <!-- ── SCRIPTS ── -->
+  <script src="js/db.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/stock.js"></script>
+  <script src="js/sales.js"></script>
+  <script src="js/clients.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/caja.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
