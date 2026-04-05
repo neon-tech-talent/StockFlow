@@ -14,68 +14,73 @@ const DB = {
     return _supabase;
   },
 
+  // Devuelve el admin_id de la sesión activa
+  _adminId() {
+    return Auth.getAdminId();
+  },
+
   /* ── CATEGORIES ── */
   async getCategories() {
-    const { data } = await this.client.from('categories').select('*').order('name');
+    const { data } = await this.client.from('categories').select('*').eq('admin_id', this._adminId()).order('name');
     return data || [];
   },
   async saveCategory(cat) {
-    if (cat.id) await this.client.from('categories').update({ name: cat.name }).eq('id', cat.id);
-    else await this.client.from('categories').insert({ name: cat.name });
+    if (cat.id) await this.client.from('categories').update({ name: cat.name }).eq('id', cat.id).eq('admin_id', this._adminId());
+    else await this.client.from('categories').insert({ name: cat.name, admin_id: this._adminId() });
   },
   async deleteCategory(id) {
-    // Check if products use it
-    const { count } = await this.client.from('products').select('*', { count: 'exact', head: true }).eq('category_id', id);
+    const { count } = await this.client.from('products').select('*', { count: 'exact', head: true }).eq('category_id', id).eq('admin_id', this._adminId());
     if (count > 0) return false;
-    await this.client.from('categories').delete().eq('id', id);
+    await this.client.from('categories').delete().eq('id', id).eq('admin_id', this._adminId());
     return true;
   },
 
   /* ── PRODUCTS ── */
   async getProducts() {
-    const { data } = await this.client.from('products').select('*').order('name');
+    const { data } = await this.client.from('products').select('*').eq('admin_id', this._adminId()).order('name');
     return data || [];
   },
   async saveProduct(p) {
     const obj = { name: p.name, category_id: p.categoryId || null, sell_price: p.sellPrice, cost_price: p.costPrice, stock: p.stock };
-    if (p.id) await this.client.from('products').update(obj).eq('id', p.id);
-    else await this.client.from('products').insert(obj);
+    if (p.id) await this.client.from('products').update(obj).eq('id', p.id).eq('admin_id', this._adminId());
+    else await this.client.from('products').insert({ ...obj, admin_id: this._adminId() });
   },
-  async deleteProduct(id) { await this.client.from('products').delete().eq('id', id); },
+  async deleteProduct(id) { await this.client.from('products').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustStock(id, delta) {
-    const { data } = await this.client.from('products').select('stock').eq('id', id).single();
-    if (data) await this.client.from('products').update({ stock: data.stock + delta }).eq('id', id);
+    const { data } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
+    if (data) await this.client.from('products').update({ stock: data.stock + delta }).eq('id', id).eq('admin_id', this._adminId());
   },
 
   /* ── CLIENTS ── */
   async getClients() {
-    const { data } = await this.client.from('clients').select('*').order('name');
+    const { data } = await this.client.from('clients').select('*').eq('admin_id', this._adminId()).order('name');
     return data || [];
   },
   async saveClient(c) {
     const obj = { name: c.name, phone: c.phone, email: c.email, balance: c.balance || 0 };
-    if (c.id) await this.client.from('clients').update(obj).eq('id', c.id);
-    else await this.client.from('clients').insert(obj);
+    if (c.id) await this.client.from('clients').update(obj).eq('id', c.id).eq('admin_id', this._adminId());
+    else await this.client.from('clients').insert({ ...obj, admin_id: this._adminId() });
   },
   async updateBalance(id, delta) {
-    const { data } = await this.client.from('clients').select('balance').eq('id', id).single();
-    if (data) await this.client.from('clients').update({ balance: parseFloat(data.balance) + delta }).eq('id', id);
+    const { data } = await this.client.from('clients').select('balance').eq('id', id).eq('admin_id', this._adminId()).single();
+    if (data) await this.client.from('clients').update({ balance: parseFloat(data.balance) + delta }).eq('id', id).eq('admin_id', this._adminId());
   },
 
   /* ── SALES ── */
   async getSales() {
-    const { data } = await this.client.from('sales').select('*').order('created_at', { ascending: false });
+    const { data } = await this.client.from('sales').select('*').eq('admin_id', this._adminId()).order('created_at', { ascending: false });
     return data || [];
   },
   async getSaleItems(saleId) {
-    let q = this.client.from('sale_items').select('*');
+    let q = this.client.from('sale_items').select('*').eq('admin_id', this._adminId());
     if (saleId) q = q.eq('sale_id', saleId);
     const { data } = await q;
     return data || [];
   },
   async saveSale(sale, items) {
     const { data: sData, error } = await this.client.from('sales').insert({
-      total: sale.total, payment_type: sale.paymentType, client_id: sale.clientId, client_name: sale.clientName
+      total: sale.total, payment_type: sale.paymentType, client_id: sale.clientId,
+      client_name: sale.clientName, admin_id: this._adminId()
     }).select().single();
 
     if (error) throw error;
@@ -83,11 +88,10 @@ const DB = {
 
     const itemsToInsert = items.map(it => ({
       sale_id: saleId, product_id: it.productId, product_name: it.productName,
-      quantity: it.quantity, unit_price: it.unitPrice
+      quantity: it.quantity, unit_price: it.unitPrice, admin_id: this._adminId()
     }));
     await this.client.from('sale_items').insert(itemsToInsert);
 
-    // Stock & Account & Cash
     for (const it of items) { await this.adjustStock(it.productId, -it.quantity); }
     if (sale.paymentType === 'efectivo') {
       await this.saveCashMovement({ amount: sale.total, type: 'venta', reason: `Venta #${saleId.slice(-4)}` });
@@ -99,13 +103,13 @@ const DB = {
     return saleId;
   },
   async voidSale(saleId) {
-    const { data: sale } = await this.client.from('sales').select('*').eq('id', saleId).single();
+    const { data: sale } = await this.client.from('sales').select('*').eq('id', saleId).eq('admin_id', this._adminId()).single();
     if (!sale || sale.voided) return false;
 
     const items = await this.getSaleItems(saleId);
     for (const it of items) { if (it.product_id) await this.adjustStock(it.product_id, it.quantity); }
 
-    await this.client.from('sales').update({ voided: true }).eq('id', saleId);
+    await this.client.from('sales').update({ voided: true }).eq('id', saleId).eq('admin_id', this._adminId());
 
     if (sale.payment_type === 'cuenta_corriente' && sale.client_id) {
       await this.addMovement({ client_id: sale.client_id, sale_id: saleId, amount: -sale.total, type: 'anulacion', notes: 'Anulación' });
@@ -119,12 +123,12 @@ const DB = {
 
   /* ── ACCOUNT MOVEMENTS ── */
   async getMovements(clientId) {
-    let q = this.client.from('account_movements').select('*');
+    let q = this.client.from('account_movements').select('*').eq('admin_id', this._adminId());
     if (clientId) q = q.eq('client_id', clientId);
     const { data } = await q.order('created_at', { ascending: false });
     return data || [];
   },
-  async addMovement(mov) { await this.client.from('account_movements').insert(mov); },
+  async addMovement(mov) { await this.client.from('account_movements').insert({ ...mov, admin_id: this._adminId() }); },
   async registerPayment(clientId, amount, notes, method) {
     await this.addMovement({ client_id: clientId, amount: -amount, type: 'pago', notes: notes || 'Pago CC' });
     if (method === 'efectivo') {
@@ -135,50 +139,51 @@ const DB = {
 
   /* ── SUPPLIES ── */
   async getSupplies() {
-    const { data } = await this.client.from('supplies').select('*').order('name');
+    const { data } = await this.client.from('supplies').select('*').eq('admin_id', this._adminId()).order('name');
     return data || [];
   },
   async saveSupply(s) {
     const obj = { name: s.name, stock: s.stock, unit: s.unit };
-    if (s.id) await this.client.from('supplies').update(obj).eq('id', s.id);
-    else await this.client.from('supplies').insert(obj);
+    if (s.id) await this.client.from('supplies').update(obj).eq('id', s.id).eq('admin_id', this._adminId());
+    else await this.client.from('supplies').insert({ ...obj, admin_id: this._adminId() });
   },
-  async deleteSupply(id) { await this.client.from('supplies').delete().eq('id', id); },
+  async deleteSupply(id) { await this.client.from('supplies').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustSupplyStock(id, delta) {
-    const { data } = await this.client.from('supplies').select('stock').eq('id', id).single();
-    if (data) await this.client.from('supplies').update({ stock: (data.stock || 0) + delta }).eq('id', id);
+    const { data } = await this.client.from('supplies').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
+    if (data) await this.client.from('supplies').update({ stock: (data.stock || 0) + delta }).eq('id', id).eq('admin_id', this._adminId());
   },
   async getDeductions() {
-    const { data } = await this.client.from('supply_deductions').select('*').order('created_at', { ascending: false });
+    const { data } = await this.client.from('supply_deductions').select('*').eq('admin_id', this._adminId()).order('created_at', { ascending: false });
     return data || [];
   },
   async saveDeduction(ded) {
     await this.client.from('supply_deductions').insert({
-      supply_id: ded.productId, supply_name: ded.productName, quantity: ded.quantity, reason: ded.reason
+      supply_id: ded.productId, supply_name: ded.productName, quantity: ded.quantity,
+      reason: ded.reason, admin_id: this._adminId()
     });
     await this.adjustSupplyStock(ded.productId, -ded.quantity);
   },
 
   /* ── EXPENSES ── */
   async getExpenses() {
-    const { data } = await this.client.from('expenses').select('*').order('date', { ascending: false });
+    const { data } = await this.client.from('expenses').select('*').eq('admin_id', this._adminId()).order('date', { ascending: false });
     return data || [];
   },
   async saveExpense(e) {
     const obj = { concept: e.concept, amount: e.amount, date: e.date };
-    if (e.id) await this.client.from('expenses').update(obj).eq('id', e.id);
-    else await this.client.from('expenses').insert(obj);
+    if (e.id) await this.client.from('expenses').update(obj).eq('id', e.id).eq('admin_id', this._adminId());
+    else await this.client.from('expenses').insert({ ...obj, admin_id: this._adminId() });
   },
-  async deleteExpense(id) { await this.client.from('expenses').delete().eq('id', id); },
+  async deleteExpense(id) { await this.client.from('expenses').delete().eq('id', id).eq('admin_id', this._adminId()); },
 
   /* ── CASH MOVEMENTS ── */
   async getCashMovements() {
-    const { data } = await this.client.from('cash_movements').select('*').order('created_at', { ascending: false });
+    const { data } = await this.client.from('cash_movements').select('*').eq('admin_id', this._adminId()).order('created_at', { ascending: false });
     return data || [];
   },
-  async saveCashMovement(mv) { await this.client.from('cash_movements').insert(mv); },
+  async saveCashMovement(mv) { await this.client.from('cash_movements').insert({ ...mv, admin_id: this._adminId() }); },
   async getCashTotal() {
-    const { data } = await this.client.from('cash_movements').select('amount');
+    const { data } = await this.client.from('cash_movements').select('amount').eq('admin_id', this._adminId());
     return (data || []).reduce((sum, m) => sum + parseFloat(m.amount), 0);
   },
 
@@ -186,16 +191,16 @@ const DB = {
   async getStats(m, y) {
     const now = new Date();
     const cm = m ?? now.getMonth(), cy = y ?? now.getFullYear();
-    
-    // For simplicity, we fetch mostly everything needed or do grouped queries
-    const { data: sales } = await this.client.from('sales').select('*').eq('voided', false);
-    const { data: items } = await this.client.from('sale_items').select('*');
-    const { data: prods } = await this.client.from('products').select('*');
-    const { data: expenses } = await this.client.from('expenses').select('*');
-    const { data: clients } = await this.client.from('clients').select('*');
+    const aid = this._adminId();
 
-    const monthlySales = (sales || []).filter(s => { const d = new Date(s.created_at); return d.getMonth() === cm && d.getFullYear() === cy; });
-    const yearlySales  = (sales || []).filter(s => new Date(s.created_at).getFullYear() === cy);
+    const { data: sales }    = await this.client.from('sales').select('*').eq('admin_id', aid).eq('voided', false);
+    const { data: items }    = await this.client.from('sale_items').select('*').eq('admin_id', aid);
+    const { data: prods }    = await this.client.from('products').select('*').eq('admin_id', aid);
+    const { data: expenses } = await this.client.from('expenses').select('*').eq('admin_id', aid);
+    const { data: clients }  = await this.client.from('clients').select('*').eq('admin_id', aid);
+
+    const monthlySales    = (sales || []).filter(s => { const d = new Date(s.created_at); return d.getMonth() === cm && d.getFullYear() === cy; });
+    const yearlySales     = (sales || []).filter(s => new Date(s.created_at).getFullYear() === cy);
     const monthlyExpenses = (expenses || []).filter(e => { const d = new Date(e.date); return d.getMonth() === cm && d.getFullYear() === cy; });
 
     let grossProfit = 0;
@@ -242,7 +247,7 @@ const DB = {
       debtors: (clients || []).filter(c => parseFloat(c.balance) > 0).length,
       grossProfit, totalExpenses, netProfit: grossProfit - totalExpenses,
       monthlyData, topClients,
-      topProducts: Object.values(prodUnits).sort((a,b) => b.units - a.units).slice(0,5),
+      topProducts:  Object.values(prodUnits).sort((a,b) => b.units - a.units).slice(0,5),
       topProfitable: Object.values(prodProfit).sort((a,b) => b.profit - a.profit).slice(0,5)
     };
   }

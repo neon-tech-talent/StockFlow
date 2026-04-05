@@ -3,52 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Entre Raíces — Gestión de Stock</title>
-  <meta name="description" content="Sistema de control de stock, ventas y estadísticas para Entre Raices">
+  <title>FlowStock — Gestión</title>
+  <meta name="description" content="FlowStock — Sistema de control de stock, ventas y estadísticas">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="css/styles.css">
   <!-- Supabase & Chart.js via CDN -->
   <script src="js/env.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="js/auth.js"></script>
 </head>
 <body>
 
   <!-- ── SIDEBAR ── -->
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <img src="logo.png" alt="Entre Raíces" onerror="this.style.display='none'">
-      <h1 style="text-transform: uppercase;">Entre Raíces<br><small style="font-size: 0.75rem; color: var(--accent-dim); text-transform: none; letter-spacing: 0.05em;">Donde nacen los sabores</small></h1>
+      <div id="sidebar-logo-icon" style="font-size:2.8rem;margin-bottom:.5rem;line-height:1;">📦</div>
+      <h1 id="sidebar-system-name" style="text-transform:uppercase;font-size:.95rem;">FlowStock<br><small style="font-size:.7rem;color:var(--accent-dim);text-transform:none;letter-spacing:.05em;">Cargando...</small></h1>
     </div>
 
-    <nav class="sidebar-nav">
-      <div class="nav-item" id="nav-stock" onclick="location.hash='#stock'"><span class="nav-icon">📦</span><span>Stock</span></div>
-      <div class="nav-item" id="nav-caja" onclick="location.hash='#caja'"><span class="nav-icon">💸</span><span>Caja</span></div>
-      <div class="nav-item" id="nav-sales" onclick="location.hash='#sales'"><span class="nav-icon">📜</span><span>Ventas</span></div>
-      <div class="nav-item" data-page="new-sale" onclick="App.go('new-sale')">
-        <span class="nav-icon">➕</span><span>Nueva Venta</span>
-      </div>
-      <div class="nav-item" data-page="clients" onclick="App.go('clients')">
-        <span class="nav-icon">👥</span><span>Clientes</span>
-      </div>
-      <div class="nav-item" data-page="stats" onclick="App.go('stats')">
-        <span class="nav-icon">📊</span><span>Estadísticas</span>
-      </div>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <!-- navegación se renderiza según el rol -->
     </nav>
 
-    <div class="sidebar-footer">Entre Raíces © 2025</div>
+    <div class="sidebar-footer">
+      <div id="sidebar-username" style="margin-bottom:.4rem;font-weight:600;color:var(--text-muted);"></div>
+      <button onclick="Auth.logout()" style="background:none;border:1px solid rgba(200,169,110,0.2);color:var(--text-muted);padding:.35rem .8rem;border-radius:6px;cursor:pointer;font-size:.75rem;font-family:inherit;transition:all .2s;width:100%;"
+        onmouseover="this.style.background='rgba(192,92,92,0.15)';this.style.color='#e07070';this.style.borderColor='rgba(192,92,92,0.35)'"
+        onmouseout="this.style.background='none';this.style.color='var(--text-muted)';this.style.borderColor='rgba(200,169,110,0.2)'">
+        🚪 Cerrar Sesión
+      </button>
+      <div style="margin-top:.5rem;">FlowStock © 2025</div>
+    </div>
   </aside>
 
   <!-- ── MAIN ── -->
   <div class="main-wrap">
     <header class="topbar">
-      <h2 id="page-title">Gestión de Stock</h2>
+      <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Menú">☰</button>
+      <h2 id="page-title">Cargando...</h2>
     </header>
     <main id="content"></main>
   </div>
 
   <!-- Modal overlay (filled dynamically) -->
   <div id="modal-overlay"></div>
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <!-- ── SCRIPTS ── -->
   <script src="js/db.js"></script>
@@ -58,6 +58,20 @@
   <script src="js/clients.js"></script>
   <script src="js/stats.js"></script>
   <script src="js/caja.js"></script>
+  <script src="js/superadmin.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    function toggleSidebar() {
+      document.querySelector('.sidebar').classList.toggle('sidebar-open');
+      document.getElementById('sidebar-overlay').classList.toggle('active');
+    }
+    function closeSidebar() {
+      document.querySelector('.sidebar').classList.remove('sidebar-open');
+      document.getElementById('sidebar-overlay').classList.remove('active');
+    }
+    document.addEventListener('click', function(e) {
+      if (e.target.closest('.nav-item') && window.innerWidth <= 768) closeSidebar();
+    });
+  </script>
 </body>
 </html>

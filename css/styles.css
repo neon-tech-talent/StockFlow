@@ -348,15 +348,162 @@ textarea.form-input { resize: vertical; }
   margin-top: .5rem; font-size: .9rem;
 }
 
-/* ── RESPONSIVE ── */
+/* ── HAMBURGER BUTTON ── */
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: .3rem .5rem;
+  border-radius: var(--radius-sm);
+  margin-right: .75rem;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.hamburger:hover { background: var(--bg-hover); }
+
+/* ── SIDEBAR OVERLAY (mobile) ── */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+}
+#sidebar-overlay.active { display: block; }
+
+/* ── TABLE SCROLL WRAPPER ── */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── TABLET (≤ 900px) ── */
 @media (max-width: 900px) {
   .new-sale-layout { grid-template-columns: 1fr; }
   .charts-grid { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 }
-@media (max-width: 640px) {
-  :root { --sidebar-w: 60px; }
-  .sidebar-logo h1, .nav-item span, .sidebar-footer { display: none; }
-  .nav-item { justify-content: center; padding: .75rem; }
+
+/* ── MOBILE (≤ 768px) ── */
+@media (max-width: 768px) {
+  :root { --sidebar-w: 240px; }
+
+  /* Mostrar hamburger */
+  .hamburger { display: flex; align-items: center; }
+
+  /* Sidebar: drawer oculto fuera de pantalla */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 101;
+    width: var(--sidebar-w);
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  /* Restaurar logo y nav items ocultos en mobile */
+  .sidebar-logo h1,
+  .nav-item span,
+  .sidebar-footer { display: revert; }
+  .nav-item { justify-content: flex-start; padding: .7rem 1.25rem; }
+
+  /* Main ocupa todo el ancho */
+  .main-wrap {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  /* Topbar */
+  .topbar { padding: 0 1rem; }
+  .topbar h2 { font-size: 1rem; }
+
+  /* Contenido con padding reducido */
+  #content { padding: 1rem; }
+
+  /* Module header apilado */
+  .module-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .module-header .btn-row {
+    justify-content: flex-start;
+  }
+  .search-group { flex-direction: column; }
+  .search-input { min-width: unset; width: 100%; }
+  .select-input { width: 100%; min-width: unset; }
+
+  /* Formularios */
   .form-row { grid-template-columns: 1fr; }
+  .modal-actions { flex-direction: column-reverse; gap: .5rem; }
+  .modal-actions .btn { width: 100%; justify-content: center; }
+
+  /* Tablas: scroll horizontal */
+  .card > .data-table,
+  #products-container > table,
+  .card table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Nueva venta */
+  .new-sale-layout { grid-template-columns: 1fr; gap: .75rem; }
+  .payment-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+
+  /* KPI */
+  .kpi-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .kpi-value { font-size: 1.2rem; }
+
+  /* Tabs */
+  .tabs-header { overflow-x: auto; flex-wrap: nowrap; }
+  .tab-btn { white-space: nowrap; flex-shrink: 0; }
+
+  /* Charts */
+  .charts-grid { grid-template-columns: 1fr; }
+
+  /* Detail grid */
+  .detail-grid { grid-template-columns: 1fr; }
+
+  /* Modal */
+  .modal-box {
+    padding: 1.25rem;
+    margin: 0;
+    border-radius: 12px;
+    width: 100%;
+  }
+  #modal-overlay { padding: 1rem .75rem; }
 }
+
+/* ── SMALL MOBILE (≤ 480px) ── */
+@media (max-width: 480px) {
+  #content { padding: .75rem; }
+  .topbar { padding: 0 .75rem; }
+
+  .kpi-row { grid-template-columns: 1fr; }
+  .kpi-card { padding: 1rem; }
+  .kpi-icon { font-size: 1.6rem; }
+
+  .payment-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .total-row span:last-child { font-size: 1.3rem; }
+
+  .btn { padding: .5rem .9rem; font-size: .82rem; }
+  .btn-lg { padding: .7rem 1.2rem; font-size: .95rem; }
+
+  .modal-box { padding: 1rem; }
+  .modal-title { font-size: 1.1rem; }
+
+  /* Tabs más compactas */
+  .tab-btn { padding: .6rem .9rem; font-size: .8rem; }
+
+  /* Ocultar columnas menos importantes en tablas muy pequeñas */
+  .data-table th:nth-child(4),
+  .data-table td:nth-child(4) { display: none; }
+}
+

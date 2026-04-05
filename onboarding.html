@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowStock — Configurar mi sistema</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap">
+  <script src="js/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/auth.js"></script>
+  <style>
+    :root {
+      --bg-base:    #171f18;
+      --bg-card:    #1e2a1f;
+      --bg-hover:   #253226;
+      --accent:     #c8a96e;
+      --accent-dim: #a88a52;
+      --accent-glow:rgba(200,169,110,0.15);
+      --text-main:  #e8dcc4;
+      --text-muted: #9a8a70;
+      --border:     rgba(200,169,110,0.16);
+      --border-hover:rgba(200,169,110,0.4);
+      --radius:     12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-base);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem 1rem;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 30% 40%, rgba(200,169,110,0.06) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .onboarding-wrap { width: 100%; max-width: 540px; }
+
+    .brand { text-align: center; margin-bottom: 2rem; }
+    .brand-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.6rem; color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+    .brand-sub { font-size: .8rem; color: var(--text-muted); margin-top: .3rem; }
+
+    .step-badge {
+      display: inline-block;
+      background: var(--accent-glow);
+      border: 1px solid var(--accent-dim);
+      color: var(--accent);
+      border-radius: 20px;
+      padding: .2rem .75rem;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .05em;
+      margin-bottom: 1rem;
+    }
+
+    .ob-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .ob-card h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      color: var(--accent);
+      margin-bottom: .5rem;
+    }
+    .ob-card p {
+      font-size: .88rem;
+      color: var(--text-muted);
+      margin-bottom: 1.75rem;
+      line-height: 1.5;
+    }
+
+    .form-group { margin-bottom: 1.5rem; }
+    .form-group label {
+      display: block;
+      font-size: .78rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: .4rem;
+    }
+    .form-input {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      font-size: 1rem;
+      font-family: inherit;
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-input::placeholder { color: var(--text-muted); opacity: .6; }
+
+    /* Logo grid */
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: .6rem;
+      margin-top: .5rem;
+    }
+    .logo-option {
+      display: flex; flex-direction: column; align-items: center;
+      gap: .4rem; padding: .9rem .5rem;
+      background: rgba(255,255,255,0.03);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all .2s;
+      text-align: center;
+    }
+    .logo-option:hover {
+      border-color: var(--accent-dim);
+      background: var(--bg-hover);
+    }
+    .logo-option.selected {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .logo-option input { display: none; }
+    .logo-emoji { font-size: 2rem; line-height: 1; }
+    .logo-label { font-size: .72rem; color: var(--text-muted); font-weight: 500; line-height: 1.2; }
+    .logo-option.selected .logo-label { color: var(--accent); }
+
+    /* Preview */
+    .preview-wrap {
+      display: flex; align-items: center; gap: 1rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+    .preview-icon { font-size: 2.2rem; }
+    .preview-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      color: var(--accent);
+    }
+    .preview-sub { font-size: .75rem; color: var(--text-muted); }
+
+    .btn-confirm {
+      width: 100%;
+      padding: .85rem;
+      background: var(--accent);
+      color: #1a1208;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all .2s;
+      letter-spacing: .04em;
+    }
+    .btn-confirm:hover {
+      background: #d4b87a;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(200,169,110,0.3);
+    }
+    .btn-confirm:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+    .error-msg {
+      background: rgba(192,92,92,0.12);
+      border: 1px solid rgba(192,92,92,0.3);
+      color: #e07070;
+      border-radius: 8px;
+      padding: .65rem 1rem;
+      font-size: .85rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .error-msg.visible { display: block; }
+
+    @media (max-width: 480px) {
+      .ob-card { padding: 1.5rem 1.1rem; }
+      .logo-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="onboarding-wrap">
+    <div class="brand">
+      <div class="brand-name">📦 FlowStock</div>
+      <div class="brand-sub">Configuración inicial de tu sistema</div>
+    </div>
+
+    <div class="ob-card">
+      <div class="step-badge">✨ Primer ingreso</div>
+      <h2>¡Bienvenido/a!</h2>
+      <p>Personalizá tu sistema antes de comenzar. Elegí el nombre de tu negocio y el tipo de empresa.</p>
+
+      <div class="error-msg" id="error-msg"></div>
+
+      <!-- Preview en vivo -->
+      <div class="preview-wrap">
+        <span class="preview-icon" id="preview-icon">🏪</span>
+        <div>
+          <div class="preview-name" id="preview-name">Mi Sistema</div>
+          <div class="preview-sub">Así se verá en tu panel</div>
+        </div>
+      </div>
+
+      <form id="ob-form">
+        <div class="form-group">
+          <label for="system-name">Nombre de tu negocio</label>
+          <input id="system-name" class="form-input" type="text" maxlength="40"
+                 placeholder="Ej: Mi Almacén, Deportes Sur..." required>
+        </div>
+
+        <div class="form-group">
+          <label>Tipo de empresa</label>
+          <div class="logo-grid" id="logo-grid">
+            <!-- generado por JS -->
+          </div>
+        </div>
+
+        <button type="submit" class="btn-confirm" id="btn-confirm">Comenzar →</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const LOGO_OPTIONS = [
+      { key: 'panaderia',    emoji: '🍞', label: 'Panadería' },
+      { key: 'comida',       emoji: '🍽️', label: 'Comida / Rest.' },
+      { key: 'perfumes',     emoji: '🌸', label: 'Perfumes / Belleza' },
+      { key: 'deportes',     emoji: '⚽', label: 'Deportes' },
+      { key: 'herramientas', emoji: '🔧', label: 'Herramientas' },
+      { key: 'informatica',  emoji: '💻', label: 'Informática' },
+      { key: 'almacen',      emoji: '🛒', label: 'Almacén / Super' },
+      { key: 'ropa',         emoji: '👗', label: 'Indumentaria' },
+      { key: 'farmacia',     emoji: '💊', label: 'Farmacia / Salud' },
+      { key: 'joyeria',      emoji: '💍', label: 'Joyería / Accesorios' },
+      { key: 'flores',       emoji: '🌺', label: 'Flores / Jardín' },
+      { key: 'general',      emoji: '🏪', label: 'General / Otro' },
+    ];
+
+    let selectedLogo = null;
+
+    // Renderizar grid de logos
+    const grid = document.getElementById('logo-grid');
+    LOGO_OPTIONS.forEach(opt => {
+      const div = document.createElement('div');
+      div.className = 'logo-option';
+      div.dataset.key = opt.key;
+      div.innerHTML = `<span class="logo-emoji">${opt.emoji}</span><span class="logo-label">${opt.label}</span>`;
+      div.addEventListener('click', () => {
+        document.querySelectorAll('.logo-option').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+        selectedLogo = opt;
+        document.getElementById('preview-icon').textContent = opt.emoji;
+      });
+      grid.appendChild(div);
+    });
+
+    // Preview del nombre en tiempo real
+    document.getElementById('system-name').addEventListener('input', function() {
+      document.getElementById('preview-name').textContent = this.value || 'Mi Sistema';
+    });
+
+    // Verificar sesión
+    const session = Auth.getSession();
+    if (!session || session.role !== 'admin') {
+      window.location.href = 'login.html';
+    }
+
+    // Supabase
+    const _sb = (() => {
+      try {
+        const url = window.SUPABASE_URL, key = window.SUPABASE_KEY;
+        return url && key ? supabase.createClient(url, key) : null;
+      } catch { return null; }
+    })();
+
+    document.getElementById('ob-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const systemName = document.getElementById('system-name').value.trim();
+      const errEl = document.getElementById('error-msg');
+      const btn   = document.getElementById('btn-confirm');
+
+      if (!selectedLogo) {
+        errEl.textContent = 'Por favor, elegí un tipo de empresa.';
+        errEl.classList.add('visible');
+        return;
+      }
+      if (!systemName) {
+        errEl.textContent = 'Escribí el nombre de tu negocio.';
+        errEl.classList.add('visible');
+        return;
+      }
+
+      errEl.classList.remove('visible');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+
+      try {
+        if (!_sb) throw new Error('Base de datos no configurada.');
+
+        // Upsert del perfil
+        const { error } = await _sb.from('admin_profiles').upsert({
+          admin_id:     session.id,
+          system_name:  systemName,
+          logo_type:    selectedLogo.key,
+          is_configured: true
+        }, { onConflict: 'admin_id' });
+
+        if (error) throw error;
+
+        window.location.href = 'index.html';
+      } catch(err) {
+        errEl.textContent = 'Error al guardar. Intentá de nuevo.';
+        errEl.classList.add('visible');
+        btn.disabled = false;
+        btn.textContent = 'Comenzar →';
+      }
+    });
+  </script>
+</body>
+</html>
