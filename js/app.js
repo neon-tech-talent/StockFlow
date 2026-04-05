@@ -56,7 +56,7 @@ const App = {
     } catch(e) {}
 
     let systemName = 'Mi Sistema';
-    let logoEmoji  = '🏪';
+    let logoType   = 'general';
 
     if (_sb) {
       const { data: profile } = await _sb
@@ -71,15 +71,21 @@ const App = {
           return;
         }
         systemName = profile.system_name || 'Mi Sistema';
-        logoEmoji  = LOGO_EMOJIS[profile.logo_type] || '🏪';
+        logoType   = profile.logo_type || 'general';
       }
     }
 
     // Actualizar título de la pestaña
     document.title = `${systemName} — FlowStock`;
 
-    // Actualizar sidebar
-    document.getElementById('sidebar-logo-icon').textContent = logoEmoji;
+    // Actualizar sidebar: logo.png para 'imagen', emoji para el resto
+    const logoEl = document.getElementById('sidebar-logo-icon');
+    if (logoType === 'imagen') {
+      logoEl.innerHTML = `<img src="logo.png" alt="${systemName}" style="width:80px;height:80px;object-fit:cover;border-radius:50%;border:1px solid var(--accent-dim);padding:4px;background:var(--bg-main);box-shadow:0 8px 32px rgba(0,0,0,0.4);" onerror="this.style.display='none'">`;
+      logoEl.style.fontSize = 'unset';
+    } else {
+      logoEl.textContent = LOGO_EMOJIS[logoType] || '🏪';
+    }
     document.getElementById('sidebar-system-name').innerHTML =
       `${systemName.toUpperCase()}<br><small style="font-size:.7rem;color:var(--accent-dim);text-transform:none;letter-spacing:.05em;">Gestión de negocio</small>`;
 
