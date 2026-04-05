@@ -209,7 +209,7 @@
     <div class="ob-card">
       <div class="step-badge">✨ Primer ingreso</div>
       <h2>¡Bienvenido/a!</h2>
-      <p>Personalizá tu sistema antes de comenzar. Elegí el nombre de tu negocio y el tipo de empresa.</p>
+      <p>Configurará tu sistema antes de comenzar. Elegí el nombre, logo y cambiá tu contraseña.</p>
 
       <div class="error-msg" id="error-msg"></div>
 
@@ -234,6 +234,21 @@
           <div class="logo-grid" id="logo-grid">
             <!-- generado por JS -->
           </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(200,169,110,0.12);margin:1.25rem 0 1.5rem;padding-top:1.5rem;">
+          <div style="font-size:.78rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem;">🔒 Cambiar contraseña (opcional)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+            <div class="form-group" style="margin:0;">
+              <label for="new-password">Nueva contraseña</label>
+              <input id="new-password" class="form-input" type="password" placeholder="Nueva contraseña" autocomplete="new-password">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label for="confirm-password">Repetir contraseña</label>
+              <input id="confirm-password" class="form-input" type="password" placeholder="Repetir contraseña" autocomplete="new-password">
+            </div>
+          </div>
+          <p style="font-size:.75rem;color:var(--text-muted);margin-top:.4rem;">Si lo dejás vacío, la contraseña no cambia.</p>
         </div>
 
         <button type="submit" class="btn-confirm" id="btn-confirm">Comenzar →</button>
@@ -296,7 +311,9 @@
 
     document.getElementById('ob-form').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const systemName = document.getElementById('system-name').value.trim();
+      const systemName  = document.getElementById('system-name').value.trim();
+      const newPassword  = document.getElementById('new-password').value;
+      const confirmPass  = document.getElementById('confirm-password').value;
       const errEl = document.getElementById('error-msg');
       const btn   = document.getElementById('btn-confirm');
 
@@ -310,6 +327,16 @@
         errEl.classList.add('visible');
         return;
       }
+      if (newPassword && newPassword !== confirmPass) {
+        errEl.textContent = 'Las contraseñas no coinciden.';
+        errEl.classList.add('visible');
+        return;
+      }
+      if (newPassword && newPassword.length < 4) {
+        errEl.textContent = 'La contraseña debe tener al menos 4 caracteres.';
+        errEl.classList.add('visible');
+        return;
+      }
 
       errEl.classList.remove('visible');
       btn.disabled = true;
@@ -318,7 +345,7 @@
       try {
         if (!_sb) throw new Error('Base de datos no configurada.');
 
-        // Upsert del perfil
+        // Guardar perfil
         const { error } = await _sb.from('admin_profiles').upsert({
           admin_id:     session.id,
           system_name:  systemName,
@@ -327,6 +354,15 @@
         }, { onConflict: 'admin_id' });
 
         if (error) throw error;
+
+        // Cambiar contraseña si se ingresó
+        if (newPassword) {
+          const { error: pwErr } = await _sb
+            .from('admin_users')
+            .update({ password: newPassword })
+            .eq('id', session.id);
+          if (pwErr) throw pwErr;
+        }
 
         window.location.href = 'index.html';
       } catch(err) {
