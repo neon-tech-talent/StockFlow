@@ -230,7 +230,10 @@ const SalesModule = {
     async _searchClients(q) {
         const res = document.getElementById('cl-results');
         if (q.length < 2) { res.innerHTML = ''; return; }
-        const data = (await DB.getClients()).filter(c => c.name.toLowerCase().includes(q.toLowerCase()));
+        const data = (await DB.getClients()).filter(c => 
+            c.name.toLowerCase().includes(q.toLowerCase()) || 
+            (c.dni && c.dni.toString().includes(q.toLowerCase()))
+        );
         if (data.length > 0) {
             res.innerHTML = data.map(c => `<div class="client-chip" onclick="SalesModule.selectClient('${c.id}', '${Utils.escHtml(c.name)}')">${Utils.escHtml(c.name)}</div>`).join('');
         } else {
@@ -250,9 +253,19 @@ const SalesModule = {
           <label>Nombre *</label>
           <input id="nc-name" name="name" class="form-input" required value="${Utils.escHtml(prefillName)}" placeholder="Nombre completo">
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>DNI</label>
+            <input id="nc-dni" name="dni" class="form-input" placeholder="Opcional">
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input id="nc-phone" name="phone" class="form-input" placeholder="Opcional">
+          </div>
+        </div>
         <div class="form-group">
-          <label>Teléfono</label>
-          <input id="nc-phone" name="phone" class="form-input" placeholder="Opcional">
+          <label>Dirección</label>
+          <input id="nc-address" name="address" class="form-input" placeholder="Opcional">
         </div>
         <div class="form-group">
           <label>Email</label>
@@ -267,11 +280,13 @@ const SalesModule = {
 
     async saveNewClientInline(e) {
         e.preventDefault();
-        const name  = document.getElementById('nc-name').value.trim();
-        const phone = document.getElementById('nc-phone').value.trim();
-        const email = document.getElementById('nc-email').value.trim();
+        const name    = document.getElementById('nc-name').value.trim();
+        const dni     = document.getElementById('nc-dni').value.trim();
+        const phone   = document.getElementById('nc-phone').value.trim();
+        const address = document.getElementById('nc-address').value.trim();
+        const email   = document.getElementById('nc-email').value.trim();
 
-        await DB.saveClient({ name, phone, email, balance: 0 });
+        await DB.saveClient({ name, dni, phone, address, email, balance: 0 });
 
         // Find the newly created client to get its ID
         const all = await DB.getClients();

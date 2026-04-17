@@ -57,7 +57,7 @@ const DB = {
     return data || [];
   },
   async saveClient(c) {
-    const obj = { name: c.name, phone: c.phone, email: c.email, balance: c.balance || 0 };
+    const obj = { name: c.name, phone: c.phone, email: c.email, balance: c.balance || 0, dni: c.dni || null, address: c.address || null };
     if (c.id) await this.client.from('clients').update(obj).eq('id', c.id).eq('admin_id', this._adminId());
     else await this.client.from('clients').insert({ ...obj, admin_id: this._adminId() });
   },

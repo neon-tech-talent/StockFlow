@@ -12,7 +12,11 @@ const ClientsModule = {
 
     async _render() {
         const q = (document.getElementById('cl-q')?.value || '').toLowerCase();
-        const data = (await DB.getClients()).filter(c => !q || c.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+        const data = (await DB.getClients()).filter(c => 
+            !q || 
+            c.name.toLowerCase().includes(q) || 
+            (c.dni && c.dni.toString().includes(q))
+        ).sort((a, b) => a.name.localeCompare(b.name));
         const box = document.getElementById('clients-container');
         if (!data.length) { box.innerHTML = '<div class="empty-state">No hay clientes</div>'; return; }
         box.innerHTML = `<table class="data-table"><thead><tr>
@@ -21,8 +25,8 @@ const ClientsModule = {
             const bal = parseFloat(c.balance || 0);
             const bc = bal > 0 ? 'text-danger' : bal < 0 ? 'text-success' : '';
             return `<tr>
-        <td><strong>${Utils.escHtml(c.name)}</strong></td>
-        <td>${Utils.escHtml(c.phone || '-')}</td>
+        <td><strong>${Utils.escHtml(c.name)}</strong><br><small class="text-muted">DNI: ${Utils.escHtml(c.dni || '-')}</small></td>
+        <td>${Utils.escHtml(c.phone || '-')}<br><small class="text-muted">${Utils.escHtml(c.address || '-')}</small></td>
         <td class="${bc}"><strong>${Utils.currency(bal)}</strong></td>
         <td>
           <button class="btn-icon" onclick="ClientsModule.viewDetail('${c.id}')">👁️</button>
@@ -42,7 +46,9 @@ const ClientsModule = {
       <h2 class="modal-title">👤 ${Utils.escHtml(c.name)}</h2>
       <div class="card" style="margin-bottom:1.5rem">
         <div class="detail-grid">
+           <div><label>DNI</label><p>${Utils.escHtml(c.dni || '-')}</p></div>
            <div><label>Teléfono</label><p>${Utils.escHtml(c.phone || '-')}</p></div>
+           <div><label>Dirección</label><p>${Utils.escHtml(c.address || '-')}</p></div>
            <div><label>Saldo CC</label><p class="${bc}"><strong>${Utils.currency(bal)}</strong></p></div>
         </div>
       </div>
@@ -66,7 +72,11 @@ const ClientsModule = {
       <h2 class="modal-title">${c ? 'Editar' : 'Nuevo'} Cliente</h2>
       <form onsubmit="ClientsModule.save(event,'${id || ''}')">
         <div class="form-group"><label>Nombre *</label><input name="name" class="form-input" required value="${Utils.escHtml(c?.name || '')}"></div>
-        <div class="form-group"><label>Teléfono</label><input name="phone" class="form-input" value="${Utils.escHtml(c?.phone || '')}"></div>
+        <div class="form-row">
+          <div class="form-group"><label>DNI</label><input name="dni" class="form-input" value="${Utils.escHtml(c?.dni || '')}"></div>
+          <div class="form-group"><label>Teléfono</label><input name="phone" class="form-input" value="${Utils.escHtml(c?.phone || '')}"></div>
+        </div>
+        <div class="form-group"><label>Dirección</label><input name="address" class="form-input" value="${Utils.escHtml(c?.address || '')}"></div>
         <div class="form-group"><label>Email</label><input name="email" type="email" class="form-input" value="${Utils.escHtml(c?.email || '')}"></div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
@@ -77,7 +87,14 @@ const ClientsModule = {
 
     async save(e, id) {
         e.preventDefault(); const f = e.target;
-        await DB.saveClient({ id: id || undefined, name: f.name.value.trim(), phone: f.phone.value.trim(), email: f.email.value.trim() });
+        await DB.saveClient({ 
+            id: id || undefined, 
+            name: f.name.value.trim(), 
+            dni: f.dni.value.trim(),
+            phone: f.phone.value.trim(), 
+            address: f.address.value.trim(),
+            email: f.email.value.trim() 
+        });
         Modal.close(); await this._render();
     },
 
