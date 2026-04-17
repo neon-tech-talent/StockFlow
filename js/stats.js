@@ -75,6 +75,13 @@ const StatsModule = {
           <h3 class="card-title">👥 Mejores Clientes</h3>
           <div id="client-table-stats"></div>
         </div>
+      </div>
+
+      <div class="charts-grid" style="margin-top:1rem">
+        <div class="chart-card" style="grid-column: 1 / -1">
+          <h3 class="card-title">⏰ Ventas por Horario (Mes actual)</h3>
+          <canvas id="chart-hourly"></canvas>
+        </div>
       </div>`;
 
         this._destroyCharts();
@@ -117,6 +124,31 @@ const StatsModule = {
         if (ct) {
             if (!s.topClients.length) { ct.innerHTML = '<div class="empty-state">Sin datos</div>'; }
             else ct.innerHTML = `<table class="data-table"><thead><tr><th>#</th><th>Cliente</th><th>Total</th></tr></thead><tbody>${s.topClients.map((c, i) => `<tr><td><span class="badge badge-info">${i + 1}</span></td><td>${Utils.escHtml(c.name)}</td><td><strong>${Utils.currency(c.total)}</strong></td></tr>`).join('')}</tbody></table>`;
+        }
+
+        const ctx4 = document.getElementById('chart-hourly');
+        if (ctx4) {
+            this._charts.push(new Chart(ctx4, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({ length: 24 }, (_, i) => `${i}hs`),
+                    datasets: [{
+                        data: s.hourlyData,
+                        backgroundColor: accent,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    ...defaults,
+                    scales: {
+                        ...defaults.scales,
+                        y: {
+                            ...defaults.scales.y,
+                            ticks: { ...defaults.scales.y.ticks, precision: 0, stepSize: 1, callback: v => v + ' v.' }
+                        }
+                    }
+                }
+            }));
         }
     }
 };

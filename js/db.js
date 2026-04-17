@@ -248,7 +248,12 @@ const DB = {
       grossProfit, totalExpenses, netProfit: grossProfit - totalExpenses,
       monthlyData, topClients,
       topProducts:  Object.values(prodUnits).sort((a,b) => b.units - a.units).slice(0,5),
-      topProfitable: Object.values(prodProfit).sort((a,b) => b.profit - a.profit).slice(0,5)
+      topProfitable: Object.values(prodProfit).sort((a,b) => b.profit - a.profit).slice(0,5),
+      hourlyData: monthlySales.reduce((acc, s) => {
+        const h = new Date(s.created_at).getHours();
+        acc[h]++;
+        return acc;
+      }, Array(24).fill(0))
     };
   }
 
