@@ -169,7 +169,7 @@ const SalesModule = {
         el.innerHTML = list.map(p => `
       <div class="prod-chip" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
         <div class="prod-chip-name">${Utils.escHtml(p.name)}</div>
-        <div class="prod-chip-stock">Stock: ${p.stock}</div>
+        <div class="prod-chip-stock">Stock: ${p.stock} ${Utils.escHtml(p.unit || 'Unidades')}</div>
         <div class="prod-chip-price">${Utils.currency(p.sell_price)}</div>
       </div>`).join('') || '<div class="empty-state">Sin resultados</div>';
     },
@@ -190,7 +190,10 @@ const SalesModule = {
                 alert(`No hay stock disponible de ${name}`);
                 return;
             }
-            this.cart.push({ productId: id, productName: name, unitPrice: price, quantity: 1, maxStock: stock });
+            this.cart.push({ 
+                productId: id, productName: name, unitPrice: price, quantity: 1, 
+                maxStock: stock, unit: prod?.unit || 'Unidades' 
+            });
         }
         this._renderCart();
     },
@@ -217,8 +220,8 @@ const SalesModule = {
         if (!this.cart.length) { el.innerHTML = '<div class="empty-state">El carrito está vacío</div>'; return; }
         el.innerHTML = `<table class="data-table"><tbody>${this.cart.map((it, i) => `
       <tr>
-        <td><strong>${Utils.escHtml(it.productName)}</strong><br><small class="text-muted">${Utils.currency(it.unitPrice)}</small></td>
-        <td><input type="number" class="qty-input" value="${it.quantity}" onchange="SalesModule.updateQty(${i}, this.value)"></td>
+        <td><strong>${Utils.escHtml(it.productName)}</strong><br><small class="text-muted">${Utils.currency(it.unitPrice)} / ${Utils.escHtml(it.unit)}</small></td>
+        <td><div style="display:flex;align-items:center;gap:.3rem"><input type="number" class="qty-input" value="${it.quantity}" onchange="SalesModule.updateQty(${i}, this.value)"> <small>${Utils.escHtml(it.unit)}</small></div></td>
         <td><strong>${Utils.currency(it.quantity * it.unitPrice)}</strong></td>
         <td><button class="btn-icon danger" onclick="SalesModule.removeFromCart(${i})">✕</button></td>
       </tr>`).join('')}</tbody></table>`;

@@ -41,7 +41,7 @@ const DB = {
     return data || [];
   },
   async saveProduct(p) {
-    const obj = { name: p.name, category_id: p.categoryId || null, sell_price: p.sellPrice, cost_price: p.costPrice, stock: p.stock };
+    const obj = { name: p.name, category_id: p.categoryId || null, sell_price: p.sellPrice, cost_price: p.costPrice, stock: p.stock, unit: p.unit };
     if (p.id) await this.client.from('products').update(obj).eq('id', p.id).eq('admin_id', this._adminId());
     else await this.client.from('products').insert({ ...obj, admin_id: this._adminId() });
   },

@@ -237,7 +237,7 @@ const StockModule = {
           ${rows.map(p => {
             const cat = cats.find(c => c.id === p.category_id);
             return `<tr><td><strong>${Utils.escHtml(p.name)}</strong></td><td>${cat?Utils.escHtml(cat.name):'-'}</td><td>${Utils.currency(p.sell_price)}</td><td>${Utils.currency(p.cost_price)}</td>
-            <td><span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}">${p.stock}</span></td>
+            <td><span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}">${p.stock} ${Utils.escHtml(p.unit || 'Unidades')}</span></td>
             <td><button class="btn-icon" onclick="StockModule.openProductModal('${p.id}')">✏️</button><button class="btn-icon danger" onclick="StockModule.delProduct('${p.id}')">🗑️</button></td></tr>`;
           }).join('')}</tbody></table>`;
     },
@@ -261,8 +261,16 @@ const StockModule = {
           <div class="form-group"><label>Precio Costo *</label>
             <input name="costPrice" type="number" step="0.01" min="0" class="form-input" required value="${p?.cost_price || ''}"></div>
         </div>
-        <div class="form-group"><label>Stock *</label>
-          <input name="stock" type="number" min="0" class="form-input" required value="${p?.stock ?? ''}"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Stock *</label>
+            <input name="stock" type="number" min="0" class="form-input" required value="${p?.stock ?? ''}"></div>
+          <div class="form-group"><label>Unidad de Medida *</label>
+            <select name="unit" class="form-input" required>
+              <option value="Unidades" ${(!p || !p.unit || p.unit === 'Unidades') ? 'selected' : ''}>Unidades</option>
+              <option value="Gramos" ${p?.unit === 'Gramos' ? 'selected' : ''}>Gramos</option>
+              <option value="Litros" ${p?.unit === 'Litros' ? 'selected' : ''}>Litros</option>
+            </select></div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
           <button type="submit" class="btn btn-primary">Guardar</button>
@@ -272,7 +280,7 @@ const StockModule = {
 
     async saveProduct(e, id) {
         e.preventDefault(); const f = e.target;
-        await DB.saveProduct({ id: id||undefined, name: f.name.value.trim(), categoryId: f.categoryId.value, sellPrice: parseFloat(f.sellPrice.value), costPrice: parseFloat(f.costPrice.value), stock: parseInt(f.stock.value) });
+        await DB.saveProduct({ id: id||undefined, name: f.name.value.trim(), categoryId: f.categoryId.value, sellPrice: parseFloat(f.sellPrice.value), costPrice: parseFloat(f.costPrice.value), stock: parseInt(f.stock.value), unit: f.unit.value });
         Modal.close(); await this._renderProducts(document.getElementById('stock-tab-content'));
     },
 
