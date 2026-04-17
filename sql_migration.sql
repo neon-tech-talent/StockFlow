@@ -100,8 +100,23 @@ BEGIN
   UPDATE cash_movements    SET admin_id = guaja_id WHERE admin_id IS NULL;
 END$$;
 
+-- 7. COLUMNAS DE FACTURACIÓN Y DESCUENTOS
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sales' AND column_name='invoiced') THEN
+    ALTER TABLE sales ADD COLUMN invoiced boolean NOT NULL DEFAULT false;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sale_items' AND column_name='discount_type') THEN
+    ALTER TABLE sale_items ADD COLUMN discount_type text NOT NULL DEFAULT 'none';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sale_items' AND column_name='discount_value') THEN
+    ALTER TABLE sale_items ADD COLUMN discount_value numeric DEFAULT 0;
+  END IF;
+END$$;
+
 -- ============================================================
 -- Fin del script. Verificar con:
 -- SELECT username, role FROM admin_users;
 -- SELECT * FROM admin_profiles;
 -- ============================================================
+

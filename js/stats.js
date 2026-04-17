@@ -30,6 +30,14 @@ const StatsModule = {
           </div>
         </div>
         <div class="kpi-card">
+          <div class="kpi-icon">🧾</div>
+          <div class="kpi-body">
+            <div class="kpi-value" style="color:#8b5cf6">${Utils.currency(s.invoicedTotal || 0)}</div>
+            <div class="kpi-label">Total Facturado</div>
+            <div class="kpi-sub">Ventas con factura</div>
+          </div>
+        </div>
+        <div class="kpi-card">
           <div class="kpi-icon">📈</div>
           <div class="kpi-body">
             <div class="kpi-value text-success">${Utils.currency(s.grossProfit)}</div>

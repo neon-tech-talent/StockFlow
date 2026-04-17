@@ -63,7 +63,10 @@ const SalesModule = {
                 <td><strong>${Utils.escHtml(s.client_name || 'Consumidor Final')}</strong></td>
                 <td><strong>${Utils.currency(s.total)}</strong></td>
                 <td><span class="badge badge-info">${s.payment_type.toUpperCase()}</span></td>
-                <td>${s.voided ? '<span class="badge badge-danger">ANULADA</span>' : '<span class="badge badge-success">COMPLETADA</span>'}</td>
+                <td>
+                   ${s.voided ? '<span class="badge badge-danger">ANULADA</span>' : '<span class="badge badge-success">COMPLETADA</span>'}
+                   ${s.invoiced ? '<br><span class="badge" style="background:#8b5cf6; margin-top:0.3rem">FACTURADA</span>' : ''}
+                </td>
                 <td>
                   <button class="btn-icon" title="Ver" onclick="SalesModule.viewSale('${s.id}')">👁️</button>
                   ${!s.voided ? `<button class="btn-icon danger" title="Anular" onclick="SalesModule.voidSale('${s.id}')">🚫</button>` : ''}
@@ -96,12 +99,24 @@ const SalesModule = {
       <table class="data-table" style="margin-top:1.5rem">
         <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr></thead>
         <tbody>
-          ${items.map(it => `<tr>
-            <td>${Utils.escHtml(it.product_name)}</td>
-            <td>${it.quantity}</td>
-            <td>${Utils.currency(it.unit_price)}</td>
-            <td>${Utils.currency(it.quantity * it.unit_price)}</td>
-          </tr>`).join('')}
+          ${items.map(it => {
+            let subtotal = it.quantity * (parseFloat(it.unit_price) || 0);
+            let discountInfo = '';
+            if (it.discount_type === 'percentage') {
+                const descVal = subtotal * ((parseFloat(it.discount_value) || 0) / 100);
+                subtotal -= descVal;
+                discountInfo = `<br><small class="text-success">-${it.discount_value}% (${Utils.currency(descVal)})</small>`;
+            } else if (it.discount_type === 'amount') {
+                subtotal -= parseFloat(it.discount_value) || 0;
+                discountInfo = `<br><small class="text-success">-${Utils.currency(it.discount_value)} desc</small>`;
+            }
+            return `<tr>
+              <td>${Utils.escHtml(it.product_name)}${discountInfo}</td>
+              <td>${it.quantity}</td>
+              <td>${Utils.currency(it.unit_price)}</td>
+              <td>${Utils.currency(Math.max(0, subtotal))}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
         <tfoot><tr><td colspan="3" style="text-align:right"><strong>Total:</strong></td><td><strong>${Utils.currency(s.total)}</strong></td></tr></tfoot>
       </table>
@@ -153,6 +168,10 @@ const SalesModule = {
             </div>
           </div>
           <div class="total-card">
+            <div style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(0,0,0,0.05); border-radius: 6px; display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
+              <input type="checkbox" id="sale-invoiced" style="width: 1.2rem; height: 1.2rem; cursor: pointer;">
+              <label for="sale-invoiced" style="font-weight: 600; cursor: pointer; user-select: none;">Facturar esta venta</label>
+            </div>
             <div class="total-row"><span>Total a Pagar:</span> <span id="sale-total">$0,00</span></div>
             <button class="btn btn-primary btn-lg" style="width:100%;margin-top:1.5rem" onclick="SalesModule.confirmSale()">🚀 FINALIZAR VENTA</button>
           </div>
@@ -192,9 +211,27 @@ const SalesModule = {
             }
             this.cart.push({ 
                 productId: id, productName: name, unitPrice: price, quantity: 1, 
-                maxStock: stock, unit: prod?.unit || 'Unidades' 
+                maxStock: stock, unit: prod?.unit || 'Unidades',
+                discountType: 'none', discountValue: 0
             });
         }
+        this._renderCart();
+    },
+
+    updateDiscountType(idx, type) {
+        this.cart[idx].discountType = type;
+        if (type === 'none') this.cart[idx].discountValue = 0;
+        else if (!this.cart[idx].discountValue) this.cart[idx].discountValue = 0;
+        this._renderCart();
+    },
+
+    updateDiscountValue(idx, val) {
+        let v = parseFloat(val) || 0;
+        const item = this.cart[idx];
+        if (item.discountType === 'percentage' && v > 100) v = 100;
+        if (item.discountType === 'amount' && v > (item.unitPrice * item.quantity)) v = item.unitPrice * item.quantity;
+        if (v < 0) v = 0;
+        item.discountValue = v;
         this._renderCart();
     },
 
@@ -215,15 +252,41 @@ const SalesModule = {
 
     _renderCart() {
         const el = document.getElementById('cart-container'); if (!el) return;
-        const total = this.cart.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
+        let total = 0;
+        
+        this.cart.forEach(it => {
+            let subtotal = it.unitPrice * it.quantity;
+            if (it.discountType === 'percentage') {
+                subtotal -= subtotal * ((it.discountValue || 0) / 100);
+            } else if (it.discountType === 'amount') {
+                subtotal -= (it.discountValue || 0);
+            }
+            it._computedSubtotal = Math.max(0, subtotal);
+            total += it._computedSubtotal;
+        });
+
         document.getElementById('sale-total').textContent = Utils.currency(total);
         if (!this.cart.length) { el.innerHTML = '<div class="empty-state">El carrito está vacío</div>'; return; }
         el.innerHTML = `<table class="data-table"><tbody>${this.cart.map((it, i) => `
       <tr>
-        <td><strong>${Utils.escHtml(it.productName)}</strong><br><small class="text-muted">${Utils.currency(it.unitPrice)} / ${Utils.escHtml(it.unit)}</small></td>
-        <td><div style="display:flex;align-items:center;gap:.3rem"><input type="number" class="qty-input" value="${it.quantity}" onchange="SalesModule.updateQty(${i}, this.value)"> <small>${Utils.escHtml(it.unit)}</small></div></td>
-        <td><strong>${Utils.currency(it.quantity * it.unitPrice)}</strong></td>
-        <td><button class="btn-icon danger" onclick="SalesModule.removeFromCart(${i})">✕</button></td>
+        <td>
+          <strong>${Utils.escHtml(it.productName)}</strong><br>
+          <small class="text-muted">${Utils.currency(it.unitPrice)} / ${Utils.escHtml(it.unit)}</small>
+          <div style="margin-top: 0.3rem; display: flex; gap: 0.3rem;">
+            <select class="form-input" style="padding: 0.2rem; font-size: 0.8rem; height: auto;" onchange="SalesModule.updateDiscountType(${i}, this.value)">
+                <option value="none" ${it.discountType === 'none' ? 'selected' : ''}>Sin Desc.</option>
+                <option value="percentage" ${it.discountType === 'percentage' ? 'selected' : ''}>Desc. (%)</option>
+                <option value="amount" ${it.discountType === 'amount' ? 'selected' : ''}>Desc. ($)</option>
+            </select>
+            ${it.discountType !== 'none' ? `<input type="number" class="form-input" style="padding: 0.2rem; font-size: 0.8rem; height: auto; width: 60px;" placeholder="${it.discountType === 'percentage' ? '%' : '$'}" value="${it.discountValue || ''}" onchange="SalesModule.updateDiscountValue(${i}, this.value)" min="0">` : ''}
+          </div>
+        </td>
+        <td style="vertical-align: top;"><div style="display:flex;align-items:center;gap:.3rem"><input type="number" class="qty-input" value="${it.quantity}" onchange="SalesModule.updateQty(${i}, this.value)"> <small>${Utils.escHtml(it.unit)}</small></div></td>
+        <td style="vertical-align: top;">
+          <strong>${Utils.currency(it._computedSubtotal)}</strong>
+          ${it.discountType !== 'none' ? `<br><small class="text-success" style="font-size: 0.75rem;">-${Utils.currency((it.unitPrice * it.quantity) - it._computedSubtotal)}</small>` : ''}
+        </td>
+        <td style="vertical-align: top;"><button class="btn-icon danger" onclick="SalesModule.removeFromCart(${i})">✕</button></td>
       </tr>`).join('')}</tbody></table>`;
     },
 
@@ -322,10 +385,12 @@ const SalesModule = {
         if (this.paymentType === 'cuenta_corriente' && !this.selectedClientId) { alert('Selecciona un cliente para cuenta corriente'); return; }
         
         try {
-            const total = this.cart.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
+            const invoiced = document.getElementById('sale-invoiced') ? document.getElementById('sale-invoiced').checked : false;
+            const total = this.cart.reduce((s, i) => s + (i._computedSubtotal || 0), 0);
             await DB.saveSale({
                 total, paymentType: this.paymentType,
-                clientId: this.selectedClientId, clientName: this.selectedClientName
+                clientId: this.selectedClientId, clientName: this.selectedClientName,
+                invoiced: invoiced
             }, this.cart);
             alert('Venta finalizada con éxito');
             App.go('sales');

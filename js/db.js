@@ -80,7 +80,7 @@ const DB = {
   async saveSale(sale, items) {
     const { data: sData, error } = await this.client.from('sales').insert({
       total: sale.total, payment_type: sale.paymentType, client_id: sale.clientId,
-      client_name: sale.clientName, admin_id: this._adminId()
+      client_name: sale.clientName, invoiced: sale.invoiced || false, admin_id: this._adminId()
     }).select().single();
 
     if (error) throw error;
@@ -88,7 +88,9 @@ const DB = {
 
     const itemsToInsert = items.map(it => ({
       sale_id: saleId, product_id: it.productId, product_name: it.productName,
-      quantity: it.quantity, unit_price: it.unitPrice, admin_id: this._adminId()
+      quantity: it.quantity, unit_price: it.unitPrice, 
+      discount_type: it.discountType || 'none', discount_value: it.discountValue || 0,
+      admin_id: this._adminId()
     }));
     await this.client.from('sale_items').insert(itemsToInsert);
 
@@ -209,10 +211,19 @@ const DB = {
       saleItems.forEach(it => {
         const p = (prods || []).find(p => p.id === it.product_id);
         const cost = p ? p.cost_price : 0;
-        grossProfit += (it.unit_price - cost) * it.quantity;
+        
+        let subtotal = (parseFloat(it.unit_price) || 0) * it.quantity;
+        if (it.discount_type === 'percentage') {
+            subtotal -= subtotal * ((parseFloat(it.discount_value) || 0) / 100);
+        } else if (it.discount_type === 'amount') {
+            subtotal -= (parseFloat(it.discount_value) || 0);
+        }
+        
+        grossProfit += Math.max(0, subtotal) - (cost * it.quantity);
       });
     });
     const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const invoicedTotal = monthlySales.filter(s => s.invoiced).reduce((sum, s) => sum + parseFloat(s.total), 0);
 
     const monthlyData = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(cy, cm - (11 - i), 1);
@@ -242,6 +253,7 @@ const DB = {
     return {
       monthlyTotal: monthlySales.reduce((s, v) => s + parseFloat(v.total), 0),
       monthlyCount: monthlySales.length,
+      invoicedTotal,
       yearlyTotal:  yearlySales.reduce((s, v) => s + parseFloat(v.total), 0),
       yearlyCount:  yearlySales.length,
       debtors: (clients || []).filter(c => parseFloat(c.balance) > 0).length,
