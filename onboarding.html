@@ -2,8 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>FlowStock — Configurar mi sistema</title>
+  <meta name="theme-color" content="#171f18">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap">
   <script src="js/env.js"></script>
@@ -102,7 +105,7 @@
       color: var(--text-main);
       border-radius: 8px;
       padding: .75rem 1rem;
-      font-size: 1rem;
+      font-size: 16px;
       font-family: inherit;
       transition: border-color .2s, box-shadow .2s;
       outline: none;
@@ -129,6 +132,7 @@
       cursor: pointer;
       transition: all .2s;
       text-align: center;
+      min-height: 70px;
     }
     .logo-option:hover {
       border-color: var(--accent-dim);
@@ -160,6 +164,12 @@
     }
     .preview-sub { font-size: .75rem; color: var(--text-muted); }
 
+    .pw-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .75rem;
+    }
+
     .btn-confirm {
       width: 100%;
       padding: .85rem;
@@ -173,6 +183,7 @@
       cursor: pointer;
       transition: all .2s;
       letter-spacing: .04em;
+      min-height: 48px;
     }
     .btn-confirm:hover {
       background: #d4b87a;
@@ -193,9 +204,10 @@
     }
     .error-msg.visible { display: block; }
 
-    @media (max-width: 480px) {
-      .ob-card { padding: 1.5rem 1.1rem; }
+    @media (max-width: 520px) {
+      .ob-card { padding: 1.25rem 1rem; }
       .logo-grid { grid-template-columns: repeat(3, 1fr); }
+      .pw-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -238,7 +250,7 @@
 
         <div style="border-top:1px solid rgba(200,169,110,0.12);margin:1.25rem 0 1.5rem;padding-top:1.5rem;">
           <div style="font-size:.78rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem;">🔒 Cambiar contraseña (opcional)</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+          <div class="pw-grid">
             <div class="form-group" style="margin:0;">
               <label for="new-password">Nueva contraseña</label>
               <input id="new-password" class="form-input" type="password" placeholder="Nueva contraseña" autocomplete="new-password">
