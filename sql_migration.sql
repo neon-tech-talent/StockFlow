@@ -1,7 +1,8 @@
 -- ============================================================
--- FlowStock — Script de migración completo
--- Ejecutar en Supabase SQL Editor
+-- FlowStock — Script de migración completo (Supabase PostgreSQL)
 -- ============================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. CREAR TABLA admin_users
 CREATE TABLE IF NOT EXISTS admin_users (
@@ -27,62 +28,48 @@ INSERT INTO admin_users (username, password, role) VALUES
   ('guaja',  '1234', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
--- 4. INSERTAR PERFIL DE GUAJA (Entre Raíces, ya configurado)
+-- 4. INSERTAR PERFIL DE GUAJA
 INSERT INTO admin_profiles (admin_id, system_name, logo_type, is_configured)
 SELECT id, 'Entre Raíces', 'comida', true
 FROM admin_users WHERE username = 'guaja'
 ON CONFLICT (admin_id) DO NOTHING;
 
--- 5. AGREGAR COLUMNA admin_id A TODAS LAS TABLAS DE DATOS
---    (se usa IF NOT EXISTS vía DO block para compatibilidad)
-
+-- 5. AGREGAR COLUMNA admin_id A TABLAS DE DATOS
 DO $$
 BEGIN
-  -- categories
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='categories' AND column_name='admin_id') THEN
     ALTER TABLE categories ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- products
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='admin_id') THEN
     ALTER TABLE products ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- clients
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='admin_id') THEN
     ALTER TABLE clients ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- account_movements
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='account_movements' AND column_name='admin_id') THEN
     ALTER TABLE account_movements ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- sales
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sales' AND column_name='admin_id') THEN
     ALTER TABLE sales ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- sale_items
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sale_items' AND column_name='admin_id') THEN
     ALTER TABLE sale_items ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- supplies
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='supplies' AND column_name='admin_id') THEN
     ALTER TABLE supplies ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- supply_deductions
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='supply_deductions' AND column_name='admin_id') THEN
     ALTER TABLE supply_deductions ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- expenses
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='expenses' AND column_name='admin_id') THEN
     ALTER TABLE expenses ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
-  -- cash_movements
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='cash_movements' AND column_name='admin_id') THEN
     ALTER TABLE cash_movements ADD COLUMN admin_id uuid REFERENCES admin_users(id);
   END IF;
 END$$;
 
--- 6. ASIGNAR TODOS LOS DATOS EXISTENTES (sin admin_id) AL USUARIO GUAJA
---    Esto preserva todos los datos actuales de Entre Raíces
-
+-- 6. ASIGNAR DATOS AL USUARIO GUAJA
 DO $$
 DECLARE guaja_id uuid;
 BEGIN
@@ -100,7 +87,7 @@ BEGIN
   UPDATE cash_movements    SET admin_id = guaja_id WHERE admin_id IS NULL;
 END$$;
 
--- 7. COLUMNAS DE FACTURACIÓN Y DESCUENTOS
+-- 7. COLUMNAS ADICIONALES DE VENTAS
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sales' AND column_name='invoiced') THEN
@@ -116,17 +103,15 @@ END$$;
 
 -- 8. TABLAS DEL MÓDULO DE GESTIÓN DE TURNOS
 
--- Configuración de Módulos por Tenant
 CREATE TABLE IF NOT EXISTS admin_modules (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id    uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
   module_key  text NOT NULL,
   enabled     boolean NOT NULL DEFAULT true,
   updated_at  timestamptz DEFAULT now(),
-  UNIQUE(admin_id, module_key)
+  CONSTRAINT uq_admin_module UNIQUE (admin_id, module_key)
 );
 
--- Servicios
 CREATE TABLE IF NOT EXISTS turnos_services (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id         uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -138,7 +123,6 @@ CREATE TABLE IF NOT EXISTS turnos_services (
   created_at       timestamptz DEFAULT now()
 );
 
--- Profesionales / Personal
 CREATE TABLE IF NOT EXISTS turnos_professionals (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id    uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -151,16 +135,14 @@ CREATE TABLE IF NOT EXISTS turnos_professionals (
   created_at  timestamptz DEFAULT now()
 );
 
--- Relación M:N Servicios - Profesionales
 CREATE TABLE IF NOT EXISTS turnos_professional_services (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
   professional_id uuid NOT NULL REFERENCES turnos_professionals(id) ON DELETE CASCADE,
   service_id      uuid NOT NULL REFERENCES turnos_services(id) ON DELETE CASCADE,
-  UNIQUE(professional_id, service_id)
+  CONSTRAINT uq_prof_service UNIQUE (professional_id, service_id)
 );
 
--- Horarios de Disponibilidad Semanal (0=Dom, 1=Lun, ..., 6=Sáb)
 CREATE TABLE IF NOT EXISTS turnos_availability (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -171,7 +153,6 @@ CREATE TABLE IF NOT EXISTS turnos_availability (
   created_at      timestamptz DEFAULT now()
 );
 
--- Bloqueos y Excepciones (Feriados, Vacaciones, Ausencias)
 CREATE TABLE IF NOT EXISTS turnos_locks (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -182,18 +163,17 @@ CREATE TABLE IF NOT EXISTS turnos_locks (
   created_at      timestamptz DEFAULT now()
 );
 
--- Configuración General de la Agenda por Tenant
 CREATE TABLE IF NOT EXISTS turnos_settings (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  admin_id             uuid UNIQUE NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  admin_id             uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
   buffer_minutes       integer NOT NULL DEFAULT 10,
   min_lead_hours       integer NOT NULL DEFAULT 2,
   max_advance_days     integer NOT NULL DEFAULT 30,
   cancellation_policy  text DEFAULT 'Cancelación permitida hasta 2 horas antes.',
-  updated_at           timestamptz DEFAULT now()
+  updated_at           timestamptz DEFAULT now(),
+  CONSTRAINT uq_turnos_settings_admin UNIQUE (admin_id)
 );
 
--- Turnos / Citas
 CREATE TABLE IF NOT EXISTS turnos_appointments (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id             uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -218,7 +198,6 @@ CREATE TABLE IF NOT EXISTS turnos_appointments (
   updated_at           timestamptz DEFAULT now()
 );
 
--- Auditoría de Turnos
 CREATE TABLE IF NOT EXISTS turnos_audit (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id    uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -231,7 +210,6 @@ CREATE TABLE IF NOT EXISTS turnos_audit (
   created_at  timestamptz DEFAULT now()
 );
 
--- Tabla para Arquitectura de Recordatorios (WhatsApp / Email)
 CREATE TABLE IF NOT EXISTS appointment_reminders (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
@@ -244,20 +222,15 @@ CREATE TABLE IF NOT EXISTS appointment_reminders (
   created_at      timestamptz DEFAULT now()
 );
 
--- ÍNDICES PARA CONSULTAS FRECUENTES
+-- 9. ÍNDICES DE RENDIMIENTO
 CREATE INDEX IF NOT EXISTS idx_turnos_appt_admin_date ON turnos_appointments(admin_id, start_datetime);
 CREATE INDEX IF NOT EXISTS idx_turnos_appt_prof ON turnos_appointments(admin_id, professional_id, start_datetime);
 CREATE INDEX IF NOT EXISTS idx_turnos_appt_client ON turnos_appointments(admin_id, client_id);
 CREATE INDEX IF NOT EXISTS idx_turnos_avail_prof ON turnos_availability(admin_id, professional_id);
 CREATE INDEX IF NOT EXISTS idx_turnos_locks_prof ON turnos_locks(admin_id, professional_id, start_datetime);
 
--- Habilitar módulo turnos para guaja por defecto
+-- 10. REGISTRO INICIAL MÓDULO TURNOS
 INSERT INTO admin_modules (admin_id, module_key, enabled)
 SELECT id, 'turnos', true
 FROM admin_users WHERE username = 'guaja'
 ON CONFLICT (admin_id, module_key) DO NOTHING;
-
--- ============================================================
--- Fin del script de migración.
--- ============================================================
-
