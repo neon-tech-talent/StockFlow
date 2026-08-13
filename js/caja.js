@@ -9,13 +9,11 @@ const CajaModule = {
         <button class="btn btn-primary" onclick="CajaModule.openExtractionModal()">💸 Realizar Extracción</button>
       </div>
 
-      <div class="kpi-row" style="grid-template-columns: 1fr">
-        <div class="kpi-card" style="border-color: var(--accent); background: var(--accent-glow); justify-content: center; padding: 2rem">
-          <div class="kpi-icon" style="font-size: 3rem">💵</div>
-          <div class="kpi-body" style="text-align: center">
-            <div class="kpi-value" style="font-size: 3rem">${Utils.currency(total)}</div>
-            <div class="kpi-label" style="font-size: 1.1rem; color: var(--accent)">TOTAL EFECTIVO EN CAJA</div>
-          </div>
+      <div class="caja-hero-card">
+        <div class="caja-hero-icon" aria-hidden="true">💵</div>
+        <div class="caja-hero-body">
+          <div class="caja-hero-value">${Utils.currency(total)}</div>
+          <div class="caja-hero-label">TOTAL EFECTIVO EN CAJA</div>
         </div>
       </div>
 
