@@ -112,6 +112,7 @@ const SuperAdminModule = {
       } else {
         document.getElementById('new-username').value = '';
         document.getElementById('new-password').value = '';
+        if (typeof Toast !== 'undefined') Toast.show('Administrador creado con éxito', 'success');
         await loadAdmins();
       }
 
@@ -129,6 +130,7 @@ const SuperAdminModule = {
     } catch(e) {}
     if (!_sb) return;
     await _sb.from('admin_users').update({ active: !currentActive }).eq('id', id);
+    if (typeof Toast !== 'undefined') Toast.show('Estado de administrador actualizado', 'info');
     await SuperAdminModule.render(document.getElementById('content'));
   }
 };

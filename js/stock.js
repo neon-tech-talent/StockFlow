@@ -142,16 +142,25 @@ const StockModule = {
             stock: parseInt(f.stock.value), unit: f.unit.value.trim()
         });
         Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show(id ? 'Insumo actualizado' : 'Nuevo insumo registrado', 'success');
         await this._renderActiveTab();
     },
 
     async delSupply(id) {
-        if (confirm('¿Eliminar este insumo?')) { await DB.deleteSupply(id); await this._renderActiveTab(); }
+        if (confirm('¿Eliminar este insumo?')) {
+            await DB.deleteSupply(id);
+            if (typeof Toast !== 'undefined') Toast.show('Insumo eliminado', 'info');
+            await this._renderActiveTab();
+        }
     },
 
     async openDeductionModal() {
         const sups = await DB.getSupplies();
-        if (!sups.length) { alert('Primero debes cargar algún insumo.'); return; }
+        if (!sups.length) {
+            if (typeof Toast !== 'undefined') Toast.show('Primero debes cargar algún insumo.', 'warning');
+            else alert('Primero debes cargar algún insumo.');
+            return;
+        }
         Modal.open(`
       <h2 class="modal-title">Descontar Stock de Insumo</h2>
       <form onsubmit="StockModule.saveDeduction(event)">
@@ -184,6 +193,7 @@ const StockModule = {
             reason: f.reason.value.trim()
         });
         Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show('Stock descontado correctamente', 'success');
         await this._renderActiveTab();
     },
 
@@ -201,7 +211,7 @@ const StockModule = {
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="submit" class="btn btn-primary">Guardar Gasto</button>
         </div>
       </form>`);
     },
@@ -211,11 +221,16 @@ const StockModule = {
         const f = e.target;
         await DB.saveExpense({ concept: f.concept.value.trim(), amount: parseFloat(f.amount.value), date: f.date.value });
         Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show('Gasto registrado con éxito', 'success');
         await this._renderActiveTab();
     },
 
     async delExpense(id) {
-        if (confirm('¿Eliminar este registro de gasto?')) { await DB.deleteExpense(id); await this._renderActiveTab(); }
+        if (confirm('¿Eliminar este registro de gasto?')) {
+            await DB.deleteExpense(id);
+            if (typeof Toast !== 'undefined') Toast.show('Gasto eliminado', 'info');
+            await this._renderActiveTab();
+        }
     },
 
     async _fillCatSelect(id) {
@@ -232,14 +247,17 @@ const StockModule = {
         const prods = await DB.getProducts();
         const rows = prods.filter(p => (!q || p.name.toLowerCase().includes(q)) && (!cf || p.category_id === cf));
         const box = document.getElementById('products-container');
-        if (!rows.length) { box.innerHTML = '<div class="empty-state">No hay productos</div>'; return; }
-        box.innerHTML = `<table class="data-table"><thead><tr><th>Producto</th><th>Categoría</th><th>P. Venta</th><th>P. Costo</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>
+        if (!rows.length) {
+            box.innerHTML = Utils.emptyState('📦', 'No hay productos encontrados', 'Prueba modificando la búsqueda o agrega un nuevo producto');
+            return;
+        }
+        box.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th>Producto</th><th>Categoría</th><th>P. Venta</th><th>P. Costo</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>
           ${rows.map(p => {
             const cat = cats.find(c => c.id === p.category_id);
             return `<tr><td><strong>${Utils.escHtml(p.name)}</strong></td><td>${cat?Utils.escHtml(cat.name):'-'}</td><td>${Utils.currency(p.sell_price)}</td><td>${Utils.currency(p.cost_price)}</td>
             <td><span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}">${p.stock} ${Utils.escHtml(p.unit || 'Unidades')}</span></td>
-            <td><button class="btn-icon" onclick="StockModule.openProductModal('${p.id}')">✏️</button><button class="btn-icon danger" onclick="StockModule.delProduct('${p.id}')">🗑️</button></td></tr>`;
-          }).join('')}</tbody></table>`;
+            <td><button class="btn-icon" aria-label="Editar ${Utils.escHtml(p.name)}" onclick="StockModule.openProductModal('${p.id}')">✏️</button><button class="btn-icon danger" aria-label="Eliminar ${Utils.escHtml(p.name)}" onclick="StockModule.delProduct('${p.id}')">🗑️</button></td></tr>`;
+          }).join('')}</tbody></table></div>`;
     },
 
     async openProductModal(id) {
@@ -248,7 +266,7 @@ const StockModule = {
         Modal.open(`
       <h2 class="modal-title">${p ? 'Editar' : 'Nuevo'} Producto</h2>
       <form onsubmit="StockModule.saveProduct(event,'${id || ''}')">
-        <div class="form-group"><label>Nombre *</label>
+        <div class="form-group"><label>Nombre del Producto *</label>
           <input name="name" class="form-input" required value="${Utils.escHtml(p?.name || '')}"></div>
         <div class="form-group"><label>Categoría</label>
           <select name="categoryId" class="form-input">
@@ -273,7 +291,7 @@ const StockModule = {
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="submit" class="btn btn-primary">Guardar Producto</button>
         </div>
       </form>`);
     },
@@ -281,26 +299,46 @@ const StockModule = {
     async saveProduct(e, id) {
         e.preventDefault(); const f = e.target;
         await DB.saveProduct({ id: id||undefined, name: f.name.value.trim(), categoryId: f.categoryId.value, sellPrice: parseFloat(f.sellPrice.value), costPrice: parseFloat(f.costPrice.value), stock: parseInt(f.stock.value), unit: f.unit.value });
-        Modal.close(); await this._renderProducts(document.getElementById('stock-tab-content'));
+        Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show(id ? 'Producto actualizado' : 'Nuevo producto creado', 'success');
+        await this._renderProducts(document.getElementById('stock-tab-content'));
     },
 
-    async delProduct(id) { if (confirm('¿Eliminar producto?')) { await DB.deleteProduct(id); await this._renderTable(); } },
+    async delProduct(id) {
+        if (confirm('¿Eliminar este producto?')) {
+            await DB.deleteProduct(id);
+            if (typeof Toast !== 'undefined') Toast.show('Producto eliminado', 'info');
+            await this._renderTable();
+        }
+    },
 
     async openCatModal() {
-        Modal.open(`<h2 class="modal-title">Categorías</h2><form onsubmit="StockModule.saveCat(event)" style="display:flex;gap:.5rem;margin-bottom:1rem">
-        <input type="hidden" id="cat-id"><input id="cat-name" class="form-input" placeholder="Nombre" required style="flex:1"><button class="btn btn-primary" type="submit">Guardar</button></form><div id="cat-list"></div>`);
+        Modal.open(`<h2 class="modal-title">Categorías de Productos</h2><form onsubmit="StockModule.saveCat(event)" style="display:flex;gap:.5rem;margin-bottom:1rem">
+        <input type="hidden" id="cat-id"><input id="cat-name" class="form-input" placeholder="Nombre de categoría..." required style="flex:1"><button class="btn btn-primary" type="submit">Guardar</button></form><div id="cat-list"></div>`);
         await this._renderCatList();
     },
 
     async _renderCatList() {
         const cats = await DB.getCategories(); const el = document.getElementById('cat-list'); if (!el) return;
-        el.innerHTML = `<table class="data-table"><tbody>${cats.map(c => `<tr><td>${Utils.escHtml(c.name)}</td><td><button class="btn-icon danger" onclick="StockModule.delCat('${c.id}')">🗑️</button></td></tr>`).join('')}</tbody></table>`;
+        if (!cats.length) { el.innerHTML = '<p class="text-muted" style="font-size:0.85rem">No hay categorías cargadas.</p>'; return; }
+        el.innerHTML = `<div class="table-scroll"><table class="data-table"><tbody>${cats.map(c => `<tr><td><strong>${Utils.escHtml(c.name)}</strong></td><td><button class="btn-icon danger" aria-label="Eliminar ${Utils.escHtml(c.name)}" onclick="StockModule.delCat('${c.id}')">🗑️</button></td></tr>`).join('')}</tbody></table></div>`;
     },
 
     async saveCat(e) {
         e.preventDefault(); const name = document.getElementById('cat-name').value.trim();
-        await DB.saveCategory({ name }); await this._renderCatList(); document.getElementById('cat-name').value='';
+        await DB.saveCategory({ name });
+        if (typeof Toast !== 'undefined') Toast.show('Categoría guardada', 'success');
+        await this._renderCatList();
+        document.getElementById('cat-name').value='';
     },
 
-    async delCat(id) { if (await DB.deleteCategory(id)) await this._renderCatList(); else alert('Tiene productos asociados'); }
+    async delCat(id) {
+        if (await DB.deleteCategory(id)) {
+            if (typeof Toast !== 'undefined') Toast.show('Categoría eliminada', 'info');
+            await this._renderCatList();
+        } else {
+            if (typeof Toast !== 'undefined') Toast.show('Tiene productos asociados', 'warning');
+            else alert('Tiene productos asociados');
+        }
+    }
 };

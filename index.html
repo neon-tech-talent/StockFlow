@@ -19,19 +19,19 @@
 <body>
 
   <!-- ── SIDEBAR ── -->
-  <aside class="sidebar">
+  <aside class="sidebar" role="navigation" aria-label="Menú principal de navegación">
     <div class="sidebar-logo">
-      <div id="sidebar-logo-icon" style="font-size:2.8rem;margin-bottom:.5rem;line-height:1;">📦</div>
+      <div id="sidebar-logo-icon" style="font-size:2.8rem;margin-bottom:.5rem;line-height:1;" aria-hidden="true">📦</div>
       <h1 id="sidebar-system-name" style="text-transform:uppercase;font-size:.95rem;">FlowStock<br><small style="font-size:.7rem;color:var(--accent-dim);text-transform:none;letter-spacing:.05em;">Cargando...</small></h1>
     </div>
 
-    <nav class="sidebar-nav" id="sidebar-nav">
+    <nav class="sidebar-nav" id="sidebar-nav" aria-label="Navegación del sistema">
       <!-- navegación se renderiza según el rol -->
     </nav>
 
     <div class="sidebar-footer">
       <div id="sidebar-username" style="margin-bottom:.4rem;font-weight:600;color:var(--text-muted);"></div>
-      <button onclick="Auth.logout()" style="background:none;border:1px solid rgba(200,169,110,0.2);color:var(--text-muted);padding:.5rem .8rem;border-radius:6px;cursor:pointer;font-size:.8rem;font-family:inherit;transition:all .2s;width:100%;min-height:44px;"
+      <button onclick="Auth.logout()" aria-label="Cerrar sesión" style="background:none;border:1px solid rgba(200,169,110,0.2);color:var(--text-muted);padding:.5rem .8rem;border-radius:6px;cursor:pointer;font-size:.8rem;font-family:inherit;transition:all .2s;width:100%;min-height:44px;"
         onmouseover="this.style.background='rgba(192,92,92,0.15)';this.style.color='#e07070';this.style.borderColor='rgba(192,92,92,0.35)'"
         onmouseout="this.style.background='none';this.style.color='var(--text-muted)';this.style.borderColor='rgba(200,169,110,0.2)'">
         🚪 Cerrar Sesión
@@ -42,16 +42,16 @@
 
   <!-- ── MAIN ── -->
   <div class="main-wrap">
-    <header class="topbar">
-      <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Menú">☰</button>
+    <header class="topbar" role="banner">
+      <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Abrir menú de navegación" aria-expanded="false">☰</button>
       <h2 id="page-title">Cargando...</h2>
     </header>
-    <main id="content"></main>
+    <main id="content" role="main" aria-live="polite"></main>
   </div>
 
   <!-- Modal overlay (filled dynamically) -->
   <div id="modal-overlay"></div>
-  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+  <div id="sidebar-overlay" onclick="closeSidebar()" aria-hidden="true"></div>
 
   <!-- ── SCRIPTS ── -->
   <script src="js/db.js"></script>
@@ -67,16 +67,20 @@
     function toggleSidebar() {
       const sidebar = document.querySelector('.sidebar');
       const overlay = document.getElementById('sidebar-overlay');
+      const btn = document.getElementById('hamburger-btn');
       const isOpen = sidebar.classList.toggle('sidebar-open');
       overlay.classList.toggle('active', isOpen);
       document.body.classList.toggle('body-menu-open', isOpen);
+      if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     }
     function closeSidebar() {
       const sidebar = document.querySelector('.sidebar');
       const overlay = document.getElementById('sidebar-overlay');
+      const btn = document.getElementById('hamburger-btn');
       sidebar.classList.remove('sidebar-open');
       overlay.classList.remove('active');
       document.body.classList.remove('body-menu-open');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
     }
     document.addEventListener('click', function(e) {
       if (e.target.closest('.nav-item') && window.innerWidth <= 768) closeSidebar();

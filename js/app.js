@@ -121,7 +121,7 @@ const App = {
     );
 
     const content = document.getElementById('content');
-    content.innerHTML = '<div class="empty-state">Cargando...</div>';
+    content.innerHTML = typeof Utils !== 'undefined' ? Utils.skeleton(4) : '<div class="empty-state">Cargando...</div>';
 
     if (typeof StatsModule !== 'undefined') StatsModule._destroyCharts?.();
 

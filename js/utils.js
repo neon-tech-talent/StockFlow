@@ -3,25 +3,97 @@ const Utils = {
     date(iso) { return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
     dateShort(iso) { return new Date(iso).toLocaleDateString('es-AR'); },
     paymentLabel(t) {
-        return { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta Corriente' }[t] || t;
+        return { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta Corriente', qr: 'MercadoPago / QR' }[t] || t;
     },
     paymentIcon(t) {
-        return { efectivo: '💵', debito: '💳', credito: '💳', transferencia: '🏦', cuenta_corriente: '📋' }[t] || '💰';
+        return { efectivo: '💵', debito: '💳', credito: '💳', transferencia: '🏦', cuenta_corriente: '📋', qr: '📱' }[t] || '💰';
     },
-    escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-};
-
-/* ── MODAL SYSTEM ── */
-const Modal = {
-    open(html) {
-        let overlay = document.getElementById('modal-overlay');
-        if (!overlay) { overlay = document.createElement('div'); overlay.id = 'modal-overlay'; document.body.appendChild(overlay); }
-        overlay.innerHTML = `<div class="modal-box">${html}<button class="modal-close-corner" onclick="Modal.close()">✕</button></div>`;
-        overlay.classList.add('active');
-        overlay.addEventListener('click', e => { if (e.target === overlay) Modal.close(); }, { once: true });
+    escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    skeleton(rows = 4) {
+        return `<div class="skeleton-container" aria-label="Cargando contenido">${Array.from({ length: rows }, () => `<div class="skeleton-row"></div>`).join('')}</div>`;
     },
-    close() {
-        const o = document.getElementById('modal-overlay');
-        if (o) { o.classList.remove('active'); setTimeout(() => o.innerHTML = '', 300); }
+    emptyState(icon = '📦', message = 'No hay registros disponibles', subtext = '') {
+        return `<div class="empty-state">
+            <span class="empty-state-icon" role="img" aria-hidden="true">${icon}</span>
+            <strong>${Utils.escHtml(message)}</strong>
+            ${subtext ? `<p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.2rem">${Utils.escHtml(subtext)}</p>` : ''}
+        </div>`;
     }
 };
+
+/* ── TOAST SYSTEM ── */
+const Toast = {
+    _getContainer() {
+        let c = document.getElementById('toast-container');
+        if (!c) {
+            c = document.createElement('div');
+            c.id = 'toast-container';
+            c.setAttribute('aria-live', 'polite');
+            c.setAttribute('aria-atomic', 'true');
+            document.body.appendChild(c);
+        }
+        return c;
+    },
+    show(message, type = 'info', duration = 3200) {
+        const c = this._getContainer();
+        const toast = document.createElement('div');
+        const icons = { success: '✅', danger: '⚠️', warning: '⚡', info: 'ℹ️' };
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `<span class="toast-icon">${icons[type] || 'ℹ️'}</span><span class="toast-message">${Utils.escHtml(message)}</span>`;
+        c.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('toast-out');
+            setTimeout(() => toast.remove(), 250);
+        }, duration);
+    }
+};
+
+/* ── MODAL SYSTEM (ACCESSIBLE) ── */
+const Modal = {
+    _lastActiveElement: null,
+
+    open(html) {
+        this._lastActiveElement = document.activeElement;
+        let overlay = document.getElementById('modal-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'modal-overlay';
+            document.body.appendChild(overlay);
+        }
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.innerHTML = `<div class="modal-box" tabindex="-1">
+            ${html}
+            <button class="modal-close-corner" onclick="Modal.close()" aria-label="Cerrar ventana modal">✕</button>
+        </div>`;
+        overlay.classList.add('active');
+
+        // Focus inside modal
+        const focusable = overlay.querySelector('input, select, textarea, button');
+        if (focusable) focusable.focus();
+
+        // ESC Key listener
+        this._onKeyDown = (e) => {
+            if (e.key === 'Escape') Modal.close();
+        };
+        window.addEventListener('keydown', this._onKeyDown);
+
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) Modal.close();
+        }, { once: true });
+    },
+
+    close() {
+        const o = document.getElementById('modal-overlay');
+        if (o) {
+            o.classList.remove('active');
+            if (this._onKeyDown) window.removeEventListener('keydown', this._onKeyDown);
+            setTimeout(() => { o.innerHTML = ''; }, 250);
+            if (this._lastActiveElement && typeof this._lastActiveElement.focus === 'function') {
+                this._lastActiveElement.focus();
+            }
+        }
+    }
+};
+

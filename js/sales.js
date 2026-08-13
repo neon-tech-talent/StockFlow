@@ -129,6 +129,7 @@ const SalesModule = {
     async voidSale(id) {
         if (confirm('¿Estás seguro de anular esta venta? El stock y saldos se restaurarán automáticamente.')) {
             await DB.voidSale(id);
+            if (typeof Toast !== 'undefined') Toast.show('Venta anulada correctamente', 'info');
             await this.renderHistory(document.getElementById('content'));
         }
     },
@@ -159,16 +160,16 @@ const SalesModule = {
             </div>
             <label class="card-title" style="display:block;margin-bottom:.5rem">Medio de Pago</label>
             <div class="payment-grid">
-              <button class="pay-btn active" id="pay-efec" onclick="SalesModule.setPayment('efectivo')">💵 <span>Efectivo</span></button>
-              <button class="pay-btn" id="pay-tran" onclick="SalesModule.setPayment('transferencia')">📱 <span>Transf.</span></button>
-              <button class="pay-btn" id="pay-cuen" onclick="SalesModule.setPayment('cuenta_corriente')">📒 <span>Cta. Cte.</span></button>
-              <button class="pay-btn" id="pay-qr__" onclick="SalesModule.setPayment('qr')">🔳 <span>QR</span></button>
-              <button class="pay-btn" id="pay-debi" onclick="SalesModule.setPayment('debito')">💳 <span>Tarjeta de Débito</span></button>
-              <button class="pay-btn" id="pay-cred" onclick="SalesModule.setPayment('credito')">💳 <span>Tarjeta de Crédito</span></button>
+              <button class="pay-btn active" id="pay-efec" type="button" onclick="SalesModule.setPayment('efectivo')">💵 <span>Efectivo</span></button>
+              <button class="pay-btn" id="pay-tran" type="button" onclick="SalesModule.setPayment('transferencia')">📱 <span>Transf.</span></button>
+              <button class="pay-btn" id="pay-cuen" type="button" onclick="SalesModule.setPayment('cuenta_corriente')">📒 <span>Cta. Cte.</span></button>
+              <button class="pay-btn" id="pay-qr__" type="button" onclick="SalesModule.setPayment('qr')">🔳 <span>QR</span></button>
+              <button class="pay-btn" id="pay-debi" type="button" onclick="SalesModule.setPayment('debito')">💳 <span>Tarjeta de Débito</span></button>
+              <button class="pay-btn" id="pay-cred" type="button" onclick="SalesModule.setPayment('credito')">💳 <span>Tarjeta de Crédito</span></button>
             </div>
           </div>
           <div class="total-card">
-            <div style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(0,0,0,0.05); border-radius: 6px; display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
+            <div style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(0,0,0,0.15); border-radius: 6px; display: flex; align-items: center; gap: 0.5rem; justify-content: center;">
               <input type="checkbox" id="sale-invoiced" style="width: 1.2rem; height: 1.2rem; cursor: pointer;">
               <label for="sale-invoiced" style="font-weight: 600; cursor: pointer; user-select: none;">Facturar esta venta</label>
             </div>
@@ -186,7 +187,7 @@ const SalesModule = {
     async _renderProdGrid(list) {
         const el = document.getElementById('ps-grid'); if (!el) return;
         el.innerHTML = list.map(p => `
-      <div class="prod-chip" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
+      <div class="prod-chip" tabindex="0" role="button" aria-label="Agregar ${Utils.escHtml(p.name)}" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
         <div class="prod-chip-name">${Utils.escHtml(p.name)}</div>
         <div class="prod-chip-stock">Stock: ${p.stock} ${Utils.escHtml(p.unit || 'Unidades')}</div>
         <div class="prod-chip-price">${Utils.currency(p.sell_price)}</div>
@@ -200,13 +201,15 @@ const SalesModule = {
         
         if (exist) {
             if (exist.quantity + 1 > stock) {
-                alert(`No hay stock suficiente de ${name}. Stock disponible: ${stock}`);
+                if (typeof Toast !== 'undefined') Toast.show(`No hay stock suficiente de ${name}. Quedan: ${stock}`, 'warning');
+                else alert(`No hay stock suficiente de ${name}. Stock disponible: ${stock}`);
                 return;
             }
             exist.quantity++;
         } else {
             if (stock < 1) {
-                alert(`No hay stock disponible de ${name}`);
+                if (typeof Toast !== 'undefined') Toast.show(`No hay stock disponible de ${name}`, 'warning');
+                else alert(`No hay stock disponible de ${name}`);
                 return;
             }
             this.cart.push({ 
@@ -215,6 +218,7 @@ const SalesModule = {
                 discountType: 'none', discountValue: 0
             });
         }
+        if (typeof Toast !== 'undefined') Toast.show(`${name} agregado al carrito`, 'info', 1500);
         this._renderCart();
     },
 
@@ -241,8 +245,9 @@ const SalesModule = {
         const q = parseInt(val);
         const item = this.cart[idx];
         if (q > item.maxStock) {
-            alert(`Stock insuficiente. Solo quedan ${item.maxStock} unidades.`);
-            this._renderCart(); // Re-render to reset value in input
+            if (typeof Toast !== 'undefined') Toast.show(`Stock insuficiente. Quedan ${item.maxStock}`, 'warning');
+            else alert(`Stock insuficiente. Solo quedan ${item.maxStock} unidades.`);
+            this._renderCart();
             return;
         }
         if (q > 0) item.quantity = q;
@@ -265,9 +270,10 @@ const SalesModule = {
             total += it._computedSubtotal;
         });
 
-        document.getElementById('sale-total').textContent = Utils.currency(total);
-        if (!this.cart.length) { el.innerHTML = '<div class="empty-state">El carrito está vacío</div>'; return; }
-        el.innerHTML = `<table class="data-table"><tbody>${this.cart.map((it, i) => `
+        const totalEl = document.getElementById('sale-total');
+        if (totalEl) totalEl.textContent = Utils.currency(total);
+        if (!this.cart.length) { el.innerHTML = Utils.emptyState('🛒', 'El carrito está vacío', 'Haz clic en un producto para agregarlo'); return; }
+        el.innerHTML = `<div class="table-scroll"><table class="data-table"><tbody>${this.cart.map((it, i) => `
       <tr>
         <td>
           <strong>${Utils.escHtml(it.productName)}</strong><br>
@@ -281,13 +287,13 @@ const SalesModule = {
             ${it.discountType !== 'none' ? `<input type="number" class="form-input" style="padding: 0.2rem; font-size: 0.8rem; height: auto; width: 60px;" placeholder="${it.discountType === 'percentage' ? '%' : '$'}" value="${it.discountValue || ''}" onchange="SalesModule.updateDiscountValue(${i}, this.value)" min="0">` : ''}
           </div>
         </td>
-        <td style="vertical-align: top;"><div style="display:flex;align-items:center;gap:.3rem"><input type="number" class="qty-input" value="${it.quantity}" onchange="SalesModule.updateQty(${i}, this.value)"> <small>${Utils.escHtml(it.unit)}</small></div></td>
+        <td style="vertical-align: top;"><div style="display:flex;align-items:center;gap:.3rem"><input type="number" class="qty-input" value="${it.quantity}" min="1" onchange="SalesModule.updateQty(${i}, this.value)"> <small>${Utils.escHtml(it.unit)}</small></div></td>
         <td style="vertical-align: top;">
           <strong>${Utils.currency(it._computedSubtotal)}</strong>
           ${it.discountType !== 'none' ? `<br><small class="text-success" style="font-size: 0.75rem;">-${Utils.currency((it.unitPrice * it.quantity) - it._computedSubtotal)}</small>` : ''}
         </td>
-        <td style="vertical-align: top;"><button class="btn-icon danger" onclick="SalesModule.removeFromCart(${i})">✕</button></td>
-      </tr>`).join('')}</tbody></table>`;
+        <td style="vertical-align: top;"><button class="btn-icon danger" aria-label="Quitar ${Utils.escHtml(it.productName)}" onclick="SalesModule.removeFromCart(${i})">✕</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
     },
 
     async _searchClients(q) {
@@ -298,7 +304,7 @@ const SalesModule = {
             (c.dni && c.dni.toString().includes(q.toLowerCase()))
         );
         if (data.length > 0) {
-            res.innerHTML = data.map(c => `<div class="client-chip" onclick="SalesModule.selectClient('${c.id}', '${Utils.escHtml(c.name)}')">${Utils.escHtml(c.name)}</div>`).join('');
+            res.innerHTML = data.map(c => `<div class="client-chip" tabindex="0" role="button" onclick="SalesModule.selectClient('${c.id}', '${Utils.escHtml(c.name)}')">${Utils.escHtml(c.name)}</div>`).join('');
         } else {
             res.innerHTML = `
               <div class="client-chip text-muted" style="font-style:italic; cursor:default;">Sin resultados para "${Utils.escHtml(q)}"</div>
@@ -313,7 +319,7 @@ const SalesModule = {
       <h2 class="modal-title">➕ Nuevo Cliente</h2>
       <form onsubmit="SalesModule.saveNewClientInline(event)">
         <div class="form-group">
-          <label>Nombre *</label>
+          <label>Nombre Completo *</label>
           <input id="nc-name" name="name" class="form-input" required value="${Utils.escHtml(prefillName)}" placeholder="Nombre completo">
         </div>
         <div class="form-row">
@@ -350,12 +356,11 @@ const SalesModule = {
         const email   = document.getElementById('nc-email').value.trim();
 
         await DB.saveClient({ name, dni, phone, address, email, balance: 0 });
-
-        // Find the newly created client to get its ID
         const all = await DB.getClients();
         const newClient = all.find(c => c.name === name);
 
         Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show(`Cliente ${name} creado con éxito`, 'success');
         if (newClient) {
             this.selectClient(newClient.id, newClient.name);
         }
@@ -365,11 +370,14 @@ const SalesModule = {
         this.selectedClientId = id; this.selectedClientName = name;
         document.getElementById('cl-results').innerHTML = '';
         document.getElementById('cl-s').value = '';
-        document.getElementById('selected-client-box').innerHTML = `
-      <div class="selected-client-tag">
-        👤 <strong>${name}</strong>
-        <button class="btn-icon" onclick="SalesModule.selectClient(null, null)">✕</button>
-      </div>`;
+        const box = document.getElementById('selected-client-box');
+        if (box) {
+            box.innerHTML = name ? `
+          <div class="selected-client-tag">
+            👤 <strong>${Utils.escHtml(name)}</strong>
+            <button class="btn-icon" aria-label="Quitar cliente seleccionado" onclick="SalesModule.selectClient(null, null)">✕</button>
+          </div>` : '';
+        }
     },
 
     setPayment(type) {
@@ -381,8 +389,16 @@ const SalesModule = {
     },
 
     async confirmSale() {
-        if (!this.cart.length) { alert('Carrito vacío'); return; }
-        if (this.paymentType === 'cuenta_corriente' && !this.selectedClientId) { alert('Selecciona un cliente para cuenta corriente'); return; }
+        if (!this.cart.length) {
+            if (typeof Toast !== 'undefined') Toast.show('El carrito está vacío', 'warning');
+            else alert('Carrito vacío');
+            return;
+        }
+        if (this.paymentType === 'cuenta_corriente' && !this.selectedClientId) {
+            if (typeof Toast !== 'undefined') Toast.show('Selecciona un cliente para la cuenta corriente', 'warning');
+            else alert('Selecciona un cliente para cuenta corriente');
+            return;
+        }
         
         try {
             const invoiced = document.getElementById('sale-invoiced') ? document.getElementById('sale-invoiced').checked : false;
@@ -392,11 +408,12 @@ const SalesModule = {
                 clientId: this.selectedClientId, clientName: this.selectedClientName,
                 invoiced: invoiced
             }, this.cart);
-            alert('Venta finalizada con éxito');
+            if (typeof Toast !== 'undefined') Toast.show('¡Venta registrada con éxito!', 'success');
             App.go('sales');
         } catch (e) {
             console.error(e);
-            alert('Error al guardar la venta');
+            if (typeof Toast !== 'undefined') Toast.show('Error al registrar la venta', 'danger');
+            else alert('Error al guardar la venta');
         }
     }
 };

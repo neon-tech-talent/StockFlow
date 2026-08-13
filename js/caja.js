@@ -21,28 +21,31 @@ const CajaModule = {
 
       <div class="card">
         <h3 class="card-title">📱 Historial de Movimientos</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Tipo</th>
-              <th>Motivo / Comentario</th>
-              <th style="text-align: right">Monto</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${movements.map(m => `
+        ${movements.length ? `
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
               <tr>
-                <td>${new Date(m.created_at).toLocaleString('es')}</td>
-                <td><span class="badge ${this._getTypeClass(m.type)}">${m.type.toUpperCase()}</span></td>
-                <td><span class="text-muted">${Utils.escHtml(m.reason || '')}</span></td>
-                <td style="text-align: right; font-weight: 600" class="${m.amount < 0 ? 'text-danger' : 'text-success'}">
-                  ${m.amount < 0 ? '-' : '+'}${Utils.currency(Math.abs(m.amount))}
-                </td>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Motivo / Comentario</th>
+                <th style="text-align: right">Monto</th>
               </tr>
-            `).join('') || '<tr><td colspan="4" class="empty-state">No hay movimientos</td></tr>'}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${movements.map(m => `
+                <tr>
+                  <td>${new Date(m.created_at).toLocaleString('es')}</td>
+                  <td><span class="badge ${this._getTypeClass(m.type)}">${m.type.toUpperCase()}</span></td>
+                  <td><span class="text-muted">${Utils.escHtml(m.reason || '')}</span></td>
+                  <td style="text-align: right; font-weight: 600" class="${m.amount < 0 ? 'text-danger' : 'text-success'}">
+                    ${m.amount < 0 ? '-' : '+'}${Utils.currency(Math.abs(m.amount))}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>` : Utils.emptyState('💵', 'No hay movimientos de caja registrados', 'Los ingresos y egresos de efectivo aparecerán aquí')}
       </div>`;
     },
 
@@ -81,8 +84,8 @@ const CajaModule = {
         const reason = f.reason.value.trim();
 
         await DB.saveCashMovement({ amount: -amount, type: 'extraccion', reason: reason });
-
         Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show('Extracción registrada con éxito', 'success');
         await this.render(document.getElementById('content'));
     }
 };

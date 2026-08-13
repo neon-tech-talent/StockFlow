@@ -18,8 +18,8 @@ const ClientsModule = {
             (c.dni && c.dni.toString().includes(q))
         ).sort((a, b) => a.name.localeCompare(b.name));
         const box = document.getElementById('clients-container');
-        if (!data.length) { box.innerHTML = '<div class="empty-state">No hay clientes</div>'; return; }
-        box.innerHTML = `<table class="data-table"><thead><tr>
+        if (!data.length) { box.innerHTML = Utils.emptyState('👥', 'No hay clientes encontrados', 'Registra un nuevo cliente para gestionar sus compras'); return; }
+        box.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr>
       <th>Nombre</th><th>Teléfono</th><th>Cuenta Corriente</th><th>Acciones</th>
     </tr></thead><tbody>${data.map(c => {
             const bal = parseFloat(c.balance || 0);
@@ -29,12 +29,12 @@ const ClientsModule = {
         <td>${Utils.escHtml(c.phone || '-')}<br><small class="text-muted">${Utils.escHtml(c.address || '-')}</small></td>
         <td class="${bc}"><strong>${Utils.currency(bal)}</strong></td>
         <td>
-          <button class="btn-icon" onclick="ClientsModule.viewDetail('${c.id}')">👁️</button>
-          <button class="btn-icon" onclick="ClientsModule.openModal('${c.id}')">✏️</button>
+          <button class="btn-icon" aria-label="Ver detalle de ${Utils.escHtml(c.name)}" onclick="ClientsModule.viewDetail('${c.id}')">👁️</button>
+          <button class="btn-icon" aria-label="Editar ${Utils.escHtml(c.name)}" onclick="ClientsModule.openModal('${c.id}')">✏️</button>
           ${bal > 0 ? `<button class="btn btn-sm btn-outline" onclick="ClientsModule.payModal('${c.id}')">💰 Pago</button>` : ''}
         </td>
       </tr>`;
-        }).join('')}</tbody></table>`;
+        }).join('')}</tbody></table></div>`;
     },
 
     async viewDetail(id) {
@@ -53,13 +53,13 @@ const ClientsModule = {
         </div>
       </div>
       <h3 class="card-title">Movimientos Cuenta Corriente</h3>
-      ${movs.length ? `<table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Notas</th></tr></thead>
+      ${movs.length ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Notas</th></tr></thead>
         <tbody>${movs.map(m => `<tr>
           <td>${new Date(m.created_at).toLocaleDateString('es')}</td>
           <td><span class="badge ${m.type === 'pago' || m.type === 'anulacion' ? 'badge-success' : 'badge-warning'}">${m.type.toUpperCase()}</span></td>
           <td class="${m.amount > 0 ? 'text-danger' : 'text-success'}">${m.amount > 0 ? '+' : ''}${Utils.currency(m.amount)}</td>
           <td>${Utils.escHtml(m.notes || '-')}</td>
-        </tr>`).join('')}</tbody></table>` : '<div class="empty-state">Sin movimientos</div>'}
+        </tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">Sin movimientos</div>'}
       <div class="modal-actions">
         ${bal > 0 ? `<button class="btn btn-primary" onclick="Modal.close();ClientsModule.payModal('${c.id}')">💰 Registrar Pago</button>` : ''}
         <button class="btn btn-outline" onclick="Modal.close()">Cerrar</button>
@@ -71,7 +71,7 @@ const ClientsModule = {
         Modal.open(`
       <h2 class="modal-title">${c ? 'Editar' : 'Nuevo'} Cliente</h2>
       <form onsubmit="ClientsModule.save(event,'${id || ''}')">
-        <div class="form-group"><label>Nombre *</label><input name="name" class="form-input" required value="${Utils.escHtml(c?.name || '')}"></div>
+        <div class="form-group"><label>Nombre Completo *</label><input name="name" class="form-input" required value="${Utils.escHtml(c?.name || '')}"></div>
         <div class="form-row">
           <div class="form-group"><label>DNI</label><input name="dni" class="form-input" value="${Utils.escHtml(c?.dni || '')}"></div>
           <div class="form-group"><label>Teléfono</label><input name="phone" class="form-input" value="${Utils.escHtml(c?.phone || '')}"></div>
@@ -80,7 +80,7 @@ const ClientsModule = {
         <div class="form-group"><label>Email</label><input name="email" type="email" class="form-input" value="${Utils.escHtml(c?.email || '')}"></div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="submit" class="btn btn-primary">Guardar Cliente</button>
         </div>
       </form>`);
     },
@@ -95,7 +95,9 @@ const ClientsModule = {
             address: f.address.value.trim(),
             email: f.email.value.trim() 
         });
-        Modal.close(); await this._render();
+        Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show(id ? 'Cliente actualizado' : 'Cliente registrado', 'success');
+        await this._render();
     },
 
     async payModal(id) {
@@ -121,6 +123,8 @@ const ClientsModule = {
     async savePay(e, id) {
         e.preventDefault(); const f = e.target;
         await DB.registerPayment(id, parseFloat(f.amount.value), f.notes.value.trim(), f.method.value);
-        Modal.close(); await this._render();
+        Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show('Pago registrado con éxito', 'success');
+        await this._render();
     }
 };

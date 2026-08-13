@@ -130,8 +130,8 @@ const StatsModule = {
 
         const ct = document.getElementById('client-table-stats');
         if (ct) {
-            if (!s.topClients.length) { ct.innerHTML = '<div class="empty-state">Sin datos</div>'; }
-            else ct.innerHTML = `<table class="data-table"><thead><tr><th>#</th><th>Cliente</th><th>Total</th></tr></thead><tbody>${s.topClients.map((c, i) => `<tr><td><span class="badge badge-info">${i + 1}</span></td><td>${Utils.escHtml(c.name)}</td><td><strong>${Utils.currency(c.total)}</strong></td></tr>`).join('')}</tbody></table>`;
+            if (!s.topClients.length) { ct.innerHTML = Utils.emptyState('👥', 'Sin clientes en este período'); }
+            else ct.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th>#</th><th>Cliente</th><th>Total</th></tr></thead><tbody>${s.topClients.map((c, i) => `<tr><td><span class="badge badge-info">${i + 1}</span></td><td>${Utils.escHtml(c.name)}</td><td><strong>${Utils.currency(c.total)}</strong></td></tr>`).join('')}</tbody></table></div>`;
         }
 
         const ctx4 = document.getElementById('chart-hourly');
@@ -148,6 +148,8 @@ const StatsModule = {
                 },
                 options: {
                     ...defaults,
+                    responsive: true,
+                    maintainAspectRatio: false,
                     scales: {
                         ...defaults.scales,
                         y: {
