@@ -273,27 +273,35 @@ const SalesModule = {
         const totalEl = document.getElementById('sale-total');
         if (totalEl) totalEl.textContent = Utils.currency(total);
         if (!this.cart.length) { el.innerHTML = Utils.emptyState('🛒', 'El carrito está vacío', 'Haz clic en un producto para agregarlo'); return; }
-        el.innerHTML = `<div class="table-scroll"><table class="data-table"><tbody>${this.cart.map((it, i) => `
-      <tr>
-        <td>
-          <strong>${Utils.escHtml(it.productName)}</strong><br>
+        el.innerHTML = `<div class="cart-list">${this.cart.map((it, i) => `
+      <div class="cart-item-card">
+        <div class="cart-item-header">
+          <strong class="cart-item-name">${Utils.escHtml(it.productName)}</strong>
+          <button class="btn-icon danger" aria-label="Quitar ${Utils.escHtml(it.productName)}" onclick="SalesModule.removeFromCart(${i})">✕</button>
+        </div>
+        <div class="cart-item-details">
           <small class="text-muted">${Utils.currency(it.unitPrice)} / ${Utils.escHtml(it.unit)}</small>
-          <div style="margin-top: 0.3rem; display: flex; gap: 0.3rem;">
-            <select class="form-input" style="padding: 0.2rem; font-size: 0.8rem; height: auto;" onchange="SalesModule.updateDiscountType(${i}, this.value)">
+          <div>
+            <strong class="cart-item-subtotal">${Utils.currency(it._computedSubtotal)}</strong>
+            ${it.discountType !== 'none' ? `<br><small class="text-success" style="font-size: 0.75rem;">-${Utils.currency((it.unitPrice * it.quantity) - it._computedSubtotal)}</small>` : ''}
+          </div>
+        </div>
+        <div class="cart-item-controls">
+          <div class="discount-selector-group">
+            <select class="form-input" style="padding: 0.25rem 0.35rem; font-size: 0.8rem; width: auto;" onchange="SalesModule.updateDiscountType(${i}, this.value)">
                 <option value="none" ${it.discountType === 'none' ? 'selected' : ''}>Sin Desc.</option>
                 <option value="percentage" ${it.discountType === 'percentage' ? 'selected' : ''}>Desc. (%)</option>
                 <option value="amount" ${it.discountType === 'amount' ? 'selected' : ''}>Desc. ($)</option>
             </select>
-            ${it.discountType !== 'none' ? `<input type="number" class="form-input" style="padding: 0.2rem; font-size: 0.8rem; height: auto; width: 60px;" placeholder="${it.discountType === 'percentage' ? '%' : '$'}" value="${it.discountValue || ''}" onchange="SalesModule.updateDiscountValue(${i}, this.value)" min="0">` : ''}
+            ${it.discountType !== 'none' ? `<input type="number" class="form-input" style="padding: 0.25rem; font-size: 0.8rem; width: 65px;" placeholder="${it.discountType === 'percentage' ? '%' : '$'}" value="${it.discountValue || ''}" onchange="SalesModule.updateDiscountValue(${i}, this.value)" min="0">` : ''}
           </div>
-        </td>
-        <td style="vertical-align: top;"><div style="display:flex;align-items:center;gap:.3rem"><input type="number" class="qty-input" value="${it.quantity}" min="1" onchange="SalesModule.updateQty(${i}, this.value)"> <small>${Utils.escHtml(it.unit)}</small></div></td>
-        <td style="vertical-align: top;">
-          <strong>${Utils.currency(it._computedSubtotal)}</strong>
-          ${it.discountType !== 'none' ? `<br><small class="text-success" style="font-size: 0.75rem;">-${Utils.currency((it.unitPrice * it.quantity) - it._computedSubtotal)}</small>` : ''}
-        </td>
-        <td style="vertical-align: top;"><button class="btn-icon danger" aria-label="Quitar ${Utils.escHtml(it.productName)}" onclick="SalesModule.removeFromCart(${i})">✕</button></td>
-      </tr>`).join('')}</tbody></table></div>`;
+          <div class="qty-stepper">
+            <button type="button" class="btn-qty" aria-label="Disminuir cantidad" onclick="SalesModule.updateQty(${i}, ${it.quantity - 1})">-</button>
+            <input type="number" class="qty-input" value="${it.quantity}" min="1" onchange="SalesModule.updateQty(${i}, this.value)">
+            <button type="button" class="btn-qty" aria-label="Aumentar cantidad" onclick="SalesModule.updateQty(${i}, ${it.quantity + 1})">+</button>
+          </div>
+        </div>
+      </div>`).join('')}</div>`;
     },
 
     async _searchClients(q) {
