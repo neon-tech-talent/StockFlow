@@ -89,12 +89,16 @@ const App = {
     document.getElementById('sidebar-system-name').innerHTML =
       `${systemName.toUpperCase()}<br><small style="font-size:.7rem;color:var(--accent-dim);text-transform:none;letter-spacing:.05em;">Gestión de negocio</small>`;
 
+    // Verificar si el módulo de turnos está habilitado para el tenant
+    const turnosEnabled = await DB.isModuleEnabled('turnos');
+
     // Navegación normal de admin
     document.getElementById('sidebar-nav').innerHTML = `
       <div class="nav-item" id="nav-stock" onclick="location.hash='#stock'"><span class="nav-icon">📦</span><span>Stock</span></div>
       <div class="nav-item" id="nav-caja" onclick="location.hash='#caja'"><span class="nav-icon">💸</span><span>Caja</span></div>
       <div class="nav-item" id="nav-sales" onclick="location.hash='#sales'"><span class="nav-icon">📜</span><span>Ventas</span></div>
       <div class="nav-item" data-page="new-sale" onclick="App.go('new-sale')"><span class="nav-icon">➕</span><span>Nueva Venta</span></div>
+      ${turnosEnabled ? '<div class="nav-item" id="nav-turnos" onclick="location.hash=\'#turnos\'"><span class="nav-icon">📅</span><span>Turnos</span></div>' : ''}
       <div class="nav-item" data-page="clients" onclick="App.go('clients')"><span class="nav-icon">👥</span><span>Clientes</span></div>
       <div class="nav-item" data-page="stats" onclick="App.go('stats')"><span class="nav-icon">📊</span><span>Estadísticas</span></div>`;
   },
@@ -110,6 +114,7 @@ const App = {
       caja: 'Control de Caja',
       sales: 'Módulo de Ventas',
       'new-sale': 'Nueva Venta',
+      turnos: 'Gestión de Turnos',
       clients: 'Clientes',
       stats: 'Estadísticas',
       superadmin: 'Panel de Administración'
@@ -127,6 +132,22 @@ const App = {
 
     if (session.role === 'superadmin') {
       await SuperAdminModule.render(content);
+      return;
+    }
+
+    if (page === 'turnos' || page.startsWith('turnos')) {
+      const enabled = await DB.isModuleEnabled('turnos');
+      if (!enabled) {
+        content.innerHTML = Utils.emptyState('🚫', 'Módulo Deshabilitado', 'El módulo de Gestión de Turnos no está activo para esta cuenta.');
+        if (typeof Toast !== 'undefined') Toast.show('Módulo de Turnos deshabilitado', 'warning');
+        setTimeout(() => { location.hash = '#stock'; }, 2500);
+        return;
+      }
+      if (typeof TurnosModule !== 'undefined') {
+        await TurnosModule.render(content);
+      } else {
+        content.innerHTML = '<div class="empty-state">Módulo de Turnos no cargado.</div>';
+      }
       return;
     }
 

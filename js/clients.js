@@ -40,11 +40,19 @@ const ClientsModule = {
     async viewDetail(id) {
         const c = (await DB.getClients()).find(x => x.id === id);
         const movs = await DB.getMovements(id);
+        const appts = typeof DB.getAppointments === 'function' ? await DB.getAppointments({ client_id: id }) : [];
         const bal = parseFloat(c.balance || 0);
         const bc = bal > 0 ? 'text-danger' : bal < 0 ? 'text-success' : '';
+
+        // Encontrar próximo turno
+        const nowIso = new Date().toISOString();
+        const nextAppt = appts
+          .filter(a => a.start_datetime >= nowIso && (a.status === 'pendiente' || a.status === 'confirmado' || a.status === 'reprogramado'))
+          .sort((a, b) => a.start_datetime.localeCompare(b.start_datetime))[0];
+
         Modal.open(`
       <h2 class="modal-title">👤 ${Utils.escHtml(c.name)}</h2>
-      <div class="card" style="margin-bottom:1.5rem">
+      <div class="card" style="margin-bottom:1rem">
         <div class="detail-grid">
            <div><label>DNI</label><p>${Utils.escHtml(c.dni || '-')}</p></div>
            <div><label>Teléfono</label><p>${Utils.escHtml(c.phone || '-')}</p></div>
@@ -52,14 +60,40 @@ const ClientsModule = {
            <div><label>Saldo CC</label><p class="${bc}"><strong>${Utils.currency(bal)}</strong></p></div>
         </div>
       </div>
-      <h3 class="card-title">Movimientos Cuenta Corriente</h3>
-      ${movs.length ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Notas</th></tr></thead>
+
+      ${nextAppt ? `
+      <div class="card" style="margin-bottom:1rem; border-color:var(--accent); background:var(--accent-glow);">
+        <div class="card-title" style="color:var(--accent);">📅 Próximo Turno</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <strong>${Utils.escHtml(nextAppt.service_name)}</strong> con <em>${Utils.escHtml(nextAppt.professional_name)}</em><br>
+            <small class="text-muted">🗓️ ${new Date(nextAppt.start_datetime).toLocaleString('es-AR', { dateStyle:'short', timeStyle:'short' })} hs (${nextAppt.duration_minutes} min)</small>
+          </div>
+          <div>
+            <span class="badge badge-warning">${nextAppt.status.toUpperCase()}</span>
+          </div>
+        </div>
+      </div>` : ''}
+
+      <h3 class="card-title" style="margin-top:1rem;">📅 Historial de Turnos (${appts.length})</h3>
+      ${appts.length ? `<div class="table-scroll" style="max-height:160px; overflow-y:auto;"><table class="data-table"><thead><tr><th>Fecha</th><th>Servicio</th><th>Profesional</th><th>Estado</th><th>Precio</th></tr></thead>
+        <tbody>${appts.map(a => `<tr>
+          <td>${new Date(a.start_datetime).toLocaleString('es-AR', { dateStyle:'short', timeStyle:'short' })}</td>
+          <td><strong>${Utils.escHtml(a.service_name)}</strong></td>
+          <td>${Utils.escHtml(a.professional_name)}</td>
+          <td><span class="badge ${a.status === 'atendido' ? 'badge-success' : a.status === 'cancelado' ? 'badge-danger' : 'badge-warning'}">${a.status.toUpperCase()}</span></td>
+          <td><strong>${Utils.currency(a.price)}</strong></td>
+        </tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:1rem;">Sin turnos registrados</div>'}
+
+      <h3 class="card-title" style="margin-top:1rem;">💳 Movimientos Cuenta Corriente</h3>
+      ${movs.length ? `<div class="table-scroll" style="max-height:160px; overflow-y:auto;"><table class="data-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Notas</th></tr></thead>
         <tbody>${movs.map(m => `<tr>
           <td>${new Date(m.created_at).toLocaleDateString('es')}</td>
           <td><span class="badge ${m.type === 'pago' || m.type === 'anulacion' ? 'badge-success' : 'badge-warning'}">${m.type.toUpperCase()}</span></td>
           <td class="${m.amount > 0 ? 'text-danger' : 'text-success'}">${m.amount > 0 ? '+' : ''}${Utils.currency(m.amount)}</td>
           <td>${Utils.escHtml(m.notes || '-')}</td>
-        </tr>`).join('')}</tbody></table></div>` : '<div class="empty-state">Sin movimientos</div>'}
+        </tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:1rem;">Sin movimientos</div>'}
+
       <div class="modal-actions">
         ${bal > 0 ? `<button class="btn btn-primary" onclick="Modal.close();ClientsModule.payModal('${c.id}')">💰 Registrar Pago</button>` : ''}
         <button class="btn btn-outline" onclick="Modal.close()">Cerrar</button>

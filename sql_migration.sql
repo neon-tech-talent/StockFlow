@@ -114,9 +114,150 @@ BEGIN
   END IF;
 END$$;
 
+-- 8. TABLAS DEL MÓDULO DE GESTIÓN DE TURNOS
+
+-- Configuración de Módulos por Tenant
+CREATE TABLE IF NOT EXISTS admin_modules (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id    uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  module_key  text NOT NULL,
+  enabled     boolean NOT NULL DEFAULT true,
+  updated_at  timestamptz DEFAULT now(),
+  UNIQUE(admin_id, module_key)
+);
+
+-- Servicios
+CREATE TABLE IF NOT EXISTS turnos_services (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id         uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  name             text NOT NULL,
+  description      text DEFAULT '',
+  duration_minutes integer NOT NULL DEFAULT 30,
+  price            numeric NOT NULL DEFAULT 0,
+  active           boolean NOT NULL DEFAULT true,
+  created_at       timestamptz DEFAULT now()
+);
+
+-- Profesionales / Personal
+CREATE TABLE IF NOT EXISTS turnos_professionals (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id    uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  first_name  text NOT NULL,
+  last_name   text DEFAULT '',
+  phone       text DEFAULT '',
+  email       text DEFAULT '',
+  active      boolean NOT NULL DEFAULT true,
+  user_id     uuid REFERENCES admin_users(id) ON DELETE SET NULL,
+  created_at  timestamptz DEFAULT now()
+);
+
+-- Relación M:N Servicios - Profesionales
+CREATE TABLE IF NOT EXISTS turnos_professional_services (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  professional_id uuid NOT NULL REFERENCES turnos_professionals(id) ON DELETE CASCADE,
+  service_id      uuid NOT NULL REFERENCES turnos_services(id) ON DELETE CASCADE,
+  UNIQUE(professional_id, service_id)
+);
+
+-- Horarios de Disponibilidad Semanal (0=Dom, 1=Lun, ..., 6=Sáb)
+CREATE TABLE IF NOT EXISTS turnos_availability (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  professional_id uuid NOT NULL REFERENCES turnos_professionals(id) ON DELETE CASCADE,
+  day_of_week     integer NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  start_time      time NOT NULL,
+  end_time        time NOT NULL,
+  created_at      timestamptz DEFAULT now()
+);
+
+-- Bloqueos y Excepciones (Feriados, Vacaciones, Ausencias)
+CREATE TABLE IF NOT EXISTS turnos_locks (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  professional_id uuid REFERENCES turnos_professionals(id) ON DELETE CASCADE,
+  start_datetime  timestamptz NOT NULL,
+  end_datetime    timestamptz NOT NULL,
+  reason          text DEFAULT '',
+  created_at      timestamptz DEFAULT now()
+);
+
+-- Configuración General de la Agenda por Tenant
+CREATE TABLE IF NOT EXISTS turnos_settings (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id             uuid UNIQUE NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  buffer_minutes       integer NOT NULL DEFAULT 10,
+  min_lead_hours       integer NOT NULL DEFAULT 2,
+  max_advance_days     integer NOT NULL DEFAULT 30,
+  cancellation_policy  text DEFAULT 'Cancelación permitida hasta 2 horas antes.',
+  updated_at           timestamptz DEFAULT now()
+);
+
+-- Turnos / Citas
+CREATE TABLE IF NOT EXISTS turnos_appointments (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id             uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  client_id            uuid REFERENCES clients(id) ON DELETE SET NULL,
+  client_name          text NOT NULL,
+  client_phone         text DEFAULT '',
+  service_id           uuid REFERENCES turnos_services(id) ON DELETE SET NULL,
+  service_name         text NOT NULL,
+  professional_id      uuid REFERENCES turnos_professionals(id) ON DELETE SET NULL,
+  professional_name    text NOT NULL,
+  start_datetime       timestamptz NOT NULL,
+  end_datetime         timestamptz NOT NULL,
+  duration_minutes     integer NOT NULL,
+  price                numeric NOT NULL DEFAULT 0,
+  status               text NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'confirmado', 'atendido', 'cancelado', 'ausente', 'reprogramado')),
+  notes                text DEFAULT '',
+  cancellation_reason  text DEFAULT '',
+  cancelled_at         timestamptz,
+  cancelled_by         text DEFAULT '',
+  rescheduled_from_id  uuid REFERENCES turnos_appointments(id) ON DELETE SET NULL,
+  created_at           timestamptz DEFAULT now(),
+  updated_at           timestamptz DEFAULT now()
+);
+
+-- Auditoría de Turnos
+CREATE TABLE IF NOT EXISTS turnos_audit (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id    uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  user_id     uuid REFERENCES admin_users(id) ON DELETE SET NULL,
+  user_name   text DEFAULT '',
+  action      text NOT NULL,
+  entity_name text NOT NULL,
+  entity_id   uuid,
+  details     text DEFAULT '',
+  created_at  timestamptz DEFAULT now()
+);
+
+-- Tabla para Arquitectura de Recordatorios (WhatsApp / Email)
+CREATE TABLE IF NOT EXISTS appointment_reminders (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id        uuid NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  appointment_id uuid NOT NULL REFERENCES turnos_appointments(id) ON DELETE CASCADE,
+  channel         text NOT NULL DEFAULT 'whatsapp' CHECK (channel IN ('whatsapp', 'email', 'internal')),
+  scheduled_at    timestamptz NOT NULL,
+  sent_at         timestamptz,
+  status          text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+  error           text DEFAULT '',
+  created_at      timestamptz DEFAULT now()
+);
+
+-- ÍNDICES PARA CONSULTAS FRECUENTES
+CREATE INDEX IF NOT EXISTS idx_turnos_appt_admin_date ON turnos_appointments(admin_id, start_datetime);
+CREATE INDEX IF NOT EXISTS idx_turnos_appt_prof ON turnos_appointments(admin_id, professional_id, start_datetime);
+CREATE INDEX IF NOT EXISTS idx_turnos_appt_client ON turnos_appointments(admin_id, client_id);
+CREATE INDEX IF NOT EXISTS idx_turnos_avail_prof ON turnos_availability(admin_id, professional_id);
+CREATE INDEX IF NOT EXISTS idx_turnos_locks_prof ON turnos_locks(admin_id, professional_id, start_datetime);
+
+-- Habilitar módulo turnos para guaja por defecto
+INSERT INTO admin_modules (admin_id, module_key, enabled)
+SELECT id, 'turnos', true
+FROM admin_users WHERE username = 'guaja'
+ON CONFLICT (admin_id, module_key) DO NOTHING;
+
 -- ============================================================
--- Fin del script. Verificar con:
--- SELECT username, role FROM admin_users;
--- SELECT * FROM admin_profiles;
+-- Fin del script de migración.
 -- ============================================================
 

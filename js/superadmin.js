@@ -54,20 +54,35 @@ const SuperAdminModule = {
         return;
       }
 
-      // Cargar perfiles para mostrar nombre del sistema
+      // Cargar perfiles y estado de módulos
       const { data: profiles } = await _sb.from('admin_profiles').select('admin_id, system_name, is_configured');
+      const { data: modules } = await _sb.from('admin_modules').select('admin_id, module_key, enabled');
+      
       const profileMap = {};
       (profiles || []).forEach(p => { profileMap[p.admin_id] = p; });
+
+      const moduleMap = {};
+      (modules || []).forEach(m => {
+        if (!moduleMap[m.admin_id]) moduleMap[m.admin_id] = {};
+        moduleMap[m.admin_id][m.module_key] = m.enabled;
+      });
 
       const rows = data.map(u => {
         const prof = profileMap[u.id];
         const sysName = prof?.is_configured ? prof.system_name : '<em style="color:var(--text-dim)">Sin configurar</em>';
         const isSelf  = u.username === 'tutuca';
+        const turnosEnabled = moduleMap[u.id]?.turnos !== false;
+
         return `
           <tr>
             <td><strong>${u.username}</strong></td>
             <td>${u.role === 'superadmin' ? '<span class="badge badge-warning">Superadmin</span>' : '<span class="badge badge-info">Admin</span>'}</td>
             <td>${sysName}</td>
+            <td>
+              <button class="btn btn-sm ${turnosEnabled ? 'btn-primary' : 'btn-outline'}" style="font-size:0.78rem;padding:0.3rem 0.6rem;" onclick="SuperAdminModule.toggleModule('${u.id}', 'turnos', ${turnosEnabled})">
+                ${turnosEnabled ? '📅 Turnos: Activo' : '🚫 Turnos: Inactivo'}
+              </button>
+            </td>
             <td>${u.active ? '<span class="badge badge-success">Activo</span>' : '<span class="badge badge-danger">Inactivo</span>'}</td>
             <td>${isSelf ? '' : `<button class="btn-icon danger" title="${u.active ? 'Desactivar' : 'Activar'}" onclick="SuperAdminModule.toggleAdmin('${u.id}', ${u.active})">${u.active ? '🚫' : '✅'}</button>`}</td>
           </tr>`;
@@ -76,7 +91,7 @@ const SuperAdminModule = {
       listEl.innerHTML = `
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Usuario</th><th>Rol</th><th>Sistema</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Sistema</th><th>Módulos</th><th>Estado</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>`;
@@ -131,6 +146,15 @@ const SuperAdminModule = {
     if (!_sb) return;
     await _sb.from('admin_users').update({ active: !currentActive }).eq('id', id);
     if (typeof Toast !== 'undefined') Toast.show('Estado de administrador actualizado', 'info');
+    await SuperAdminModule.render(document.getElementById('content'));
+  },
+
+  async toggleModule(adminId, moduleKey, currentEnabled) {
+    const newStatus = !currentEnabled;
+    await DB.setModuleEnabled(adminId, moduleKey, newStatus);
+    if (typeof Toast !== 'undefined') {
+      Toast.show(`Módulo ${moduleKey} ${newStatus ? 'HABILITADO' : 'DESHABILITADO'} para la cuenta`, newStatus ? 'success' : 'warning');
+    }
     await SuperAdminModule.render(document.getElementById('content'));
   }
 };
