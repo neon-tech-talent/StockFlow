@@ -19,15 +19,25 @@ const SalesModule = {
             if (totals[s.payment_type] !== undefined) totals[s.payment_type] += parseFloat(s.total || 0);
         });
 
+        const currentYr = new Date().getFullYear();
+        const yearOptions = [currentYr - 2, currentYr - 1, currentYr, currentYr + 1];
+        if (!yearOptions.includes(this.historyYear)) {
+            yearOptions.push(this.historyYear);
+            yearOptions.sort((a, b) => a - b);
+        }
+
         el.innerHTML = `
       <div class="module-header">
         <h2 class="card-title">Histórico de Ventas</h2>
-        <div style="display:flex; gap:.5rem">
+        <div style="display:flex; gap:.5rem; flex-wrap: wrap;">
            <select class="form-input" onchange="SalesModule.setHistoryFilter(this.value, null)">
-             ${Array.from({ length: 12 }, (_, i) => `<option value="${i}" ${i === this.historyMonth ? 'selected' : ''}>${new Date(2000, i).toLocaleString('es', { month: 'long' })}</option>`).join('')}
+             ${Array.from({ length: 12 }, (_, i) => {
+               const raw = new Date(2000, i).toLocaleString('es', { month: 'long' });
+               return `<option value="${i}" ${i === this.historyMonth ? 'selected' : ''}>${raw.charAt(0).toUpperCase() + raw.slice(1)}</option>`;
+             }).join('')}
            </select>
            <select class="form-input" onchange="SalesModule.setHistoryFilter(null, this.value)">
-             ${[2024, 2025, 2026].map(y => `<option value="${y}" ${y === this.historyYear ? 'selected' : ''}>${y}</option>`).join('')}
+             ${yearOptions.map(y => `<option value="${y}" ${y === this.historyYear ? 'selected' : ''}>${y}</option>`).join('')}
            </select>
            <button class="btn btn-primary" onclick="App.go('new-sale')">+ Nueva Venta</button>
         </div>

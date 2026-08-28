@@ -125,10 +125,10 @@ const App = {
       n.classList.toggle('active', (n.dataset.page === page || n.id === 'nav-' + page))
     );
 
+    if (typeof StatsModule !== 'undefined') StatsModule._destroyCharts?.();
+
     const content = document.getElementById('content');
     content.innerHTML = typeof Utils !== 'undefined' ? Utils.skeleton(4) : '<div class="empty-state">Cargando...</div>';
-
-    if (typeof StatsModule !== 'undefined') StatsModule._destroyCharts?.();
 
     if (session.role === 'superadmin') {
       await SuperAdminModule.render(content);
@@ -151,14 +151,21 @@ const App = {
       return;
     }
 
-    switch (page) {
-      case 'stock':    await StockModule.render(content);        break;
-      case 'caja':     await CajaModule.render(content);         break;
-      case 'sales':    await SalesModule.renderHistory(content); break;
-      case 'new-sale': await SalesModule.renderNewSale(content); break;
-      case 'clients':  await ClientsModule.render(content);      break;
-      case 'stats':    await StatsModule.render(content);        break;
-      default:         await StockModule.render(content);
+    try {
+      switch (page) {
+        case 'stock':    await StockModule.render(content);        break;
+        case 'caja':     await CajaModule.render(content);         break;
+        case 'sales':    await SalesModule.renderHistory(content); break;
+        case 'new-sale': await SalesModule.renderNewSale(content); break;
+        case 'clients':  await ClientsModule.render(content);      break;
+        case 'stats':    await StatsModule.render(content);        break;
+        default:         await StockModule.render(content);
+      }
+    } catch (routeErr) {
+      console.error(`Error loading page ${page}:`, routeErr);
+      content.innerHTML = typeof Utils !== 'undefined' 
+        ? Utils.emptyState('⚠️', 'Error al cargar la sección', 'Ocurrió un inconveniente al cargar esta página. Intenta recargar.') 
+        : '<div class="empty-state">Error al cargar.</div>';
     }
   }
 };

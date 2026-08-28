@@ -191,81 +191,220 @@ const DB = {
 
   /* ── STATISTICS ── */
   async getStats(m, y) {
-    const now = new Date();
-    const cm = m ?? now.getMonth(), cy = y ?? now.getFullYear();
-    const aid = this._adminId();
+    try {
+      const now = new Date();
+      const cm = (m !== undefined && m !== null && !isNaN(m)) ? parseInt(m) : now.getMonth();
+      const cy = (y !== undefined && y !== null && !isNaN(y)) ? parseInt(y) : now.getFullYear();
+      const aid = this._adminId();
 
-    const { data: sales }    = await this.client.from('sales').select('*').eq('admin_id', aid).eq('voided', false);
-    const { data: items }    = await this.client.from('sale_items').select('*').eq('admin_id', aid);
-    const { data: prods }    = await this.client.from('products').select('*').eq('admin_id', aid);
-    const { data: expenses } = await this.client.from('expenses').select('*').eq('admin_id', aid);
-    const { data: clients }  = await this.client.from('clients').select('*').eq('admin_id', aid);
+      if (!aid || !this.client) {
+        return this._getEmptyStats(cm, cy);
+      }
 
-    const monthlySales    = (sales || []).filter(s => { const d = new Date(s.created_at); return d.getMonth() === cm && d.getFullYear() === cy; });
-    const yearlySales     = (sales || []).filter(s => new Date(s.created_at).getFullYear() === cy);
-    const monthlyExpenses = (expenses || []).filter(e => { const d = new Date(e.date); return d.getMonth() === cm && d.getFullYear() === cy; });
+      const [salesRes, itemsRes, prodsRes, expRes, clientsRes] = await Promise.allSettled([
+        this.client.from('sales').select('*').eq('admin_id', aid).eq('voided', false),
+        this.client.from('sale_items').select('*').eq('admin_id', aid),
+        this.client.from('products').select('*').eq('admin_id', aid),
+        this.client.from('expenses').select('*').eq('admin_id', aid),
+        this.client.from('clients').select('*').eq('admin_id', aid)
+      ]);
 
-    let grossProfit = 0;
-    monthlySales.forEach(s => {
-      const saleItems = (items || []).filter(i => i.sale_id === s.id);
-      saleItems.forEach(it => {
-        const p = (prods || []).find(p => p.id === it.product_id);
-        const cost = p ? p.cost_price : 0;
-        
-        let subtotal = (parseFloat(it.unit_price) || 0) * it.quantity;
-        if (it.discount_type === 'percentage') {
-            subtotal -= subtotal * ((parseFloat(it.discount_value) || 0) / 100);
-        } else if (it.discount_type === 'amount') {
-            subtotal -= (parseFloat(it.discount_value) || 0);
+      const sales   = (salesRes.status === 'fulfilled' && Array.isArray(salesRes.value?.data)) ? salesRes.value.data : [];
+      const items   = (itemsRes.status === 'fulfilled' && Array.isArray(itemsRes.value?.data)) ? itemsRes.value.data : [];
+      const prods   = (prodsRes.status === 'fulfilled' && Array.isArray(prodsRes.value?.data)) ? prodsRes.value.data : [];
+      const expenses= (expRes.status === 'fulfilled' && Array.isArray(expRes.value?.data)) ? expRes.value.data : [];
+      const clients = (clientsRes.status === 'fulfilled' && Array.isArray(clientsRes.value?.data)) ? clientsRes.value.data : [];
+
+      const parseDate = (dStr) => {
+        if (!dStr) return null;
+        if (typeof dStr === 'string' && !dStr.includes('T') && dStr.includes('-')) {
+          const parts = dStr.split('-').map(Number);
+          if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            return new Date(parts[0], parts[1] - 1, parts[2] || 1);
+          }
         }
-        
-        grossProfit += Math.max(0, subtotal) - (cost * it.quantity);
-      });
-    });
-    const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    const invoicedTotal = monthlySales.filter(s => s.invoiced).reduce((sum, s) => sum + parseFloat(s.total), 0);
+        const d = new Date(dStr);
+        return isNaN(d.getTime()) ? null : d;
+      };
 
+      const validSales = sales.filter(s => s && !s.voided);
+
+      const monthlySales = validSales.filter(s => {
+        const d = parseDate(s.created_at);
+        return d && d.getMonth() === cm && d.getFullYear() === cy;
+      });
+
+      const yearlySales = validSales.filter(s => {
+        const d = parseDate(s.created_at);
+        return d && d.getFullYear() === cy;
+      });
+
+      const monthlyExpenses = (expenses || []).filter(e => {
+        const d = parseDate(e.date || e.created_at);
+        return d && d.getMonth() === cm && d.getFullYear() === cy;
+      });
+
+      const monthlySaleIds = new Set(monthlySales.map(s => s.id));
+      const monthlyItems = (items || []).filter(it => it && monthlySaleIds.has(it.sale_id));
+
+      let grossProfit = 0;
+      monthlySales.forEach(s => {
+        const saleItems = monthlyItems.filter(i => i.sale_id === s.id);
+        saleItems.forEach(it => {
+          const p = prods.find(pr => pr.id === it.product_id);
+          const cost = parseFloat(p?.cost_price) || 0;
+          const qty = parseFloat(it.quantity) || 0;
+          let unitPrice = parseFloat(it.unit_price) || 0;
+          let subtotal = unitPrice * qty;
+
+          const discVal = parseFloat(it.discount_value) || 0;
+          if (it.discount_type === 'percentage') {
+            subtotal -= subtotal * (discVal / 100);
+          } else if (it.discount_type === 'amount') {
+            subtotal -= discVal;
+          }
+          
+          grossProfit += Math.max(0, subtotal) - (cost * qty);
+        });
+      });
+
+      const totalExpenses = monthlyExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+      const monthlyTotal = monthlySales.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+      const invoicedTotal = monthlySales.filter(s => s.invoiced).reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+      const yearlyTotal = yearlySales.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+
+      // Evolución 12 meses
+      const monthlyData = Array.from({ length: 12 }, (_, i) => {
+        const targetDate = new Date(cy, cm - (11 - i), 1);
+        const tMonth = targetDate.getMonth();
+        const tYear = targetDate.getFullYear();
+        const total = validSales.filter(s => {
+          const sd = parseDate(s.created_at);
+          return sd && sd.getMonth() === tMonth && sd.getFullYear() === tYear;
+        }).reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+
+        const rawLabel = targetDate.toLocaleString('es', { month: 'short', year: '2-digit' });
+        return {
+          label: rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1),
+          total: Math.round(total * 100) / 100
+        };
+      });
+
+      // Top Clientes
+      const clientMap = {};
+      const salesForClients = monthlySales.length > 0 ? monthlySales : validSales;
+      salesForClients.forEach(s => {
+        const k = s.client_id || s.client_name || '__none__';
+        const name = s.client_name || 'Consumidor Final';
+        if (!clientMap[k]) clientMap[k] = { name, total: 0, count: 0 };
+        clientMap[k].total += (parseFloat(s.total) || 0);
+        clientMap[k].count++;
+      });
+      const topClients = Object.values(clientMap)
+        .filter(c => c.total > 0)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 8);
+
+      // Top Productos y Rentables
+      const itemsForStats = monthlyItems.length > 0 ? monthlyItems : (items || []).filter(it => {
+        const parentSale = validSales.find(s => s.id === it.sale_id);
+        return !!parentSale;
+      });
+
+      const prodUnits = {}, prodProfit = {};
+      itemsForStats.forEach(it => {
+        const p = prods.find(pr => pr.id === it.product_id);
+        const prodKey = it.product_id || it.product_name || '__unknown__';
+        const prodName = it.product_name || p?.name || 'Producto';
+        const qty = parseFloat(it.quantity) || 0;
+        const unitPrice = parseFloat(it.unit_price) || 0;
+        const costPrice = parseFloat(p?.cost_price) || 0;
+
+        if (!prodUnits[prodKey]) prodUnits[prodKey] = { name: prodName, units: 0 };
+        prodUnits[prodKey].units += qty;
+
+        if (!prodProfit[prodKey]) prodProfit[prodKey] = { name: prodName, profit: 0 };
+        let itemRevenue = unitPrice * qty;
+        const discVal = parseFloat(it.discount_value) || 0;
+        if (it.discount_type === 'percentage') {
+          itemRevenue -= itemRevenue * (discVal / 100);
+        } else if (it.discount_type === 'amount') {
+          itemRevenue -= discVal;
+        }
+        const profit = Math.max(0, itemRevenue) - (costPrice * qty);
+        prodProfit[prodKey].profit += profit;
+      });
+
+      const topProducts = Object.values(prodUnits)
+        .filter(p => p.units > 0)
+        .sort((a, b) => b.units - a.units)
+        .slice(0, 5);
+
+      const topProfitable = Object.values(prodProfit)
+        .filter(p => p.profit > 0)
+        .sort((a, b) => b.profit - a.profit)
+        .slice(0, 5);
+
+      // Ventas por Horario (0 a 23 hs)
+      const hourlyData = Array(24).fill(0);
+      monthlySales.forEach(s => {
+        const d = parseDate(s.created_at);
+        if (d) {
+          const h = d.getHours();
+          if (h >= 0 && h < 24) {
+            hourlyData[h]++;
+          }
+        }
+      });
+
+      const debtors = (clients || []).filter(c => (parseFloat(c.balance) || 0) > 0).length;
+
+      return {
+        monthlyTotal: Math.round(monthlyTotal * 100) / 100,
+        monthlyCount: monthlySales.length,
+        invoicedTotal: Math.round(invoicedTotal * 100) / 100,
+        yearlyTotal: Math.round(yearlyTotal * 100) / 100,
+        yearlyCount: yearlySales.length,
+        debtors,
+        grossProfit: Math.round(grossProfit * 100) / 100,
+        totalExpenses: Math.round(totalExpenses * 100) / 100,
+        netProfit: Math.round((grossProfit - totalExpenses) * 100) / 100,
+        monthlyData,
+        topClients,
+        topProducts,
+        topProfitable,
+        hourlyData
+      };
+    } catch (err) {
+      console.error("Error in DB.getStats:", err);
+      return this._getEmptyStats(m, y);
+    }
+  },
+
+  _getEmptyStats(m, y) {
+    const now = new Date();
+    const cm = (m !== undefined && m !== null && !isNaN(m)) ? parseInt(m) : now.getMonth();
+    const cy = (y !== undefined && y !== null && !isNaN(y)) ? parseInt(y) : now.getFullYear();
     const monthlyData = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(cy, cm - (11 - i), 1);
-      const total = (sales || []).filter(s => { const sd = new Date(s.created_at); return sd.getMonth() === d.getMonth() && sd.getFullYear() === d.getFullYear(); })
-        .reduce((sum, s) => sum + parseFloat(s.total), 0);
-      return { label: d.toLocaleString('es', { month: 'short', year: '2-digit' }), total };
+      const rawLabel = d.toLocaleString('es', { month: 'short', year: '2-digit' });
+      return { label: rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1), total: 0 };
     });
-
-    const clientMap = {};
-    (sales || []).forEach(s => {
-      const k = s.client_id || '__none__';
-      if (!clientMap[k]) clientMap[k] = { name: s.client_name || 'Sin cliente', total: 0, count: 0 };
-      clientMap[k].total += parseFloat(s.total); clientMap[k].count++;
-    });
-    const topClients = Object.values(clientMap).sort((a, b) => b.total - a.total).slice(0, 8);
-
-    const prodUnits = {}, prodProfit = {};
-    (items || []).forEach(it => {
-      const p = (prods || []).find(p => p.id === it.product_id);
-      if (!prodUnits[it.product_id]) prodUnits[it.product_id] = { name: it.product_name, units: 0 };
-      prodUnits[it.product_id].units += it.quantity;
-      if (!prodProfit[it.product_id]) prodProfit[it.product_id] = { name: it.product_name, profit: 0 };
-      const margin = p ? (it.unit_price - p.cost_price) : 0;
-      prodProfit[it.product_id].profit += margin * it.quantity;
-    });
-
     return {
-      monthlyTotal: monthlySales.reduce((s, v) => s + parseFloat(v.total), 0),
-      monthlyCount: monthlySales.length,
-      invoicedTotal,
-      yearlyTotal:  yearlySales.reduce((s, v) => s + parseFloat(v.total), 0),
-      yearlyCount:  yearlySales.length,
-      debtors: (clients || []).filter(c => parseFloat(c.balance) > 0).length,
-      grossProfit, totalExpenses, netProfit: grossProfit - totalExpenses,
-      monthlyData, topClients,
-      topProducts:  Object.values(prodUnits).sort((a,b) => b.units - a.units).slice(0,5),
-      topProfitable: Object.values(prodProfit).sort((a,b) => b.profit - a.profit).slice(0,5),
-      hourlyData: monthlySales.reduce((acc, s) => {
-        const h = new Date(s.created_at).getHours();
-        acc[h]++;
-        return acc;
-      }, Array(24).fill(0))
+      monthlyTotal: 0,
+      monthlyCount: 0,
+      invoicedTotal: 0,
+      yearlyTotal: 0,
+      yearlyCount: 0,
+      debtors: 0,
+      grossProfit: 0,
+      totalExpenses: 0,
+      netProfit: 0,
+      monthlyData,
+      topClients: [],
+      topProducts: [],
+      topProfitable: [],
+      hourlyData: Array(24).fill(0)
     };
   },
 
