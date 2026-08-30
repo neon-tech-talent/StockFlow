@@ -682,6 +682,195 @@ const DB = {
         status: 'pending'
       });
     } catch(e) {}
+  },
+
+  /* ── MÓDULO DE ENCARGOS / PEDIDOS PROGRAMADOS ── */
+  async getCustomOrders(statusFilter = '') {
+    try {
+      let q = this.client
+        .from('custom_orders')
+        .select(`
+          *,
+          custom_order_items (*)
+        `)
+        .eq('admin_id', this._adminId())
+        .order('delivery_datetime', { ascending: true });
+
+      if (statusFilter && statusFilter !== 'todos') {
+        if (statusFilter === 'activos') {
+          q = q.in('status', ['pendiente', 'en_preparacion']);
+        } else {
+          q = q.eq('status', statusFilter);
+        }
+      }
+
+      const { data, error } = await q;
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error("Error al obtener encargos:", err);
+      return [];
+    }
+  },
+
+  async getCustomOrderById(id) {
+    try {
+      const { data, error } = await this.client
+        .from('custom_orders')
+        .select(`
+          *,
+          custom_order_items (*)
+        `)
+        .eq('id', id)
+        .eq('admin_id', this._adminId())
+        .single();
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error("Error al obtener detalle del encargo:", err);
+      return null;
+    }
+  },
+
+  async saveCustomOrder(orderData, items = []) {
+    const isNew = !orderData.id;
+    const totalAmount = items.reduce((sum, it) => sum + (parseFloat(it.unit_price || it.unitPrice || 0) * parseFloat(it.quantity || 1)), 0);
+    const depositAmount = parseFloat(orderData.deposit_amount || orderData.depositAmount || 0);
+    const remainingAmount = Math.max(0, totalAmount - depositAmount);
+
+    const payload = {
+      admin_id: this._adminId(),
+      client_id: orderData.client_id || orderData.clientId || null,
+      client_name: orderData.client_name || orderData.clientName,
+      client_phone: orderData.client_phone || orderData.clientPhone || '',
+      client_address: orderData.client_address || orderData.clientAddress || '',
+      delivery_datetime: orderData.delivery_datetime || orderData.deliveryDatetime,
+      alert_lead_minutes: parseInt(orderData.alert_lead_minutes || orderData.alertLeadMinutes || 60),
+      status: orderData.status || 'pendiente',
+      total_amount: totalAmount,
+      deposit_amount: depositAmount,
+      deposit_payment_type: orderData.deposit_payment_type || orderData.depositPaymentType || 'efectivo',
+      remaining_amount: remainingAmount,
+      notes: orderData.notes || ''
+    };
+
+    let savedOrder;
+    if (isNew) {
+      const { data, error } = await this.client.from('custom_orders').insert(payload).select().single();
+      if (error) throw error;
+      savedOrder = data;
+
+      // Si hubo seña en efectivo, registrar ingreso en caja
+      if (depositAmount > 0 && payload.deposit_payment_type === 'efectivo') {
+        await this.addCashMovement(depositAmount, 'venta', `Seña Encargo #${savedOrder.order_number || ''} (${savedOrder.client_name})`);
+      }
+    } else {
+      const { data, error } = await this.client.from('custom_orders').update(payload).eq('id', orderData.id).eq('admin_id', this._adminId()).select().single();
+      if (error) throw error;
+      savedOrder = data;
+
+      // Eliminar ítems previos para reinsertar
+      await this.client.from('custom_order_items').delete().eq('order_id', orderData.id).eq('admin_id', this._adminId());
+    }
+
+    // Insertar ítems del encargo
+    if (items.length > 0) {
+      const itemsPayload = items.map(it => ({
+        admin_id: this._adminId(),
+        order_id: savedOrder.id,
+        product_id: it.product_id || it.productId || null,
+        product_name: it.product_name || it.productName || it.name,
+        unit_price: parseFloat(it.unit_price || it.unitPrice || 0),
+        quantity: parseFloat(it.quantity || 1),
+        subtotal: parseFloat(it.unit_price || it.unitPrice || 0) * parseFloat(it.quantity || 1)
+      }));
+      const { error: itemsErr } = await this.client.from('custom_order_items').insert(itemsPayload);
+      if (itemsErr) console.error("Error al insertar ítems de encargo:", itemsErr);
+    }
+
+    return savedOrder;
+  },
+
+  async completeCustomOrder(orderId, remainingPaymentType = 'efectivo') {
+    const order = await this.getCustomOrderById(orderId);
+    if (!order) throw new Error("El encargo no existe.");
+    if (order.status === 'completado') throw new Error("El encargo ya fue completado.");
+
+    const items = order.custom_order_items || [];
+
+    // 1. Descontar stock físico de cada producto
+    for (const item of items) {
+      if (item.product_id) {
+        await this.adjustStock(item.product_id, -Math.abs(item.quantity));
+      }
+    }
+
+    // 2. Registrar venta oficial en tabla 'sales' y 'sale_items'
+    const saleCart = items.map(it => ({
+      productId: it.product_id,
+      productName: it.product_name,
+      unitPrice: it.unit_price,
+      quantity: it.quantity,
+      unit: 'Unidades',
+      discountType: 'none',
+      discountValue: 0
+    }));
+
+    const saleResult = await this.saveSale({
+      total: order.total_amount,
+      paymentType: remainingPaymentType,
+      clientId: order.client_id,
+      clientName: order.client_name,
+      invoiced: false
+    }, saleCart);
+
+    // 3. Si hubo saldo restante y el medio de cobro es efectivo, registrar movimiento en caja
+    const remaining = parseFloat(order.remaining_amount) || 0;
+    if (remaining > 0 && remainingPaymentType === 'efectivo') {
+      await this.addCashMovement(remaining, 'venta', `Cobro Saldo Encargo #${order.order_number || ''} (${order.client_name})`);
+    }
+
+    // 4. Marcar encargo como completado
+    const { data: completedOrder, error } = await this.client
+      .from('custom_orders')
+      .update({
+        status: 'completado',
+        completed_at: new Date().toISOString(),
+        sale_id: saleResult?.id || null
+      })
+      .eq('id', orderId)
+      .eq('admin_id', this._adminId())
+      .select()
+      .single();
+
+    if (error) throw error;
+    return completedOrder;
+  },
+
+  async cancelCustomOrder(orderId) {
+    const { data, error } = await this.client
+      .from('custom_orders')
+      .update({ status: 'cancelado' })
+      .eq('id', orderId)
+      .eq('admin_id', this._adminId())
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getCustomOrderAlerts() {
+    try {
+      const orders = await this.getCustomOrders('activos');
+      const now = Date.now();
+      return orders.filter(o => {
+        const deliveryTime = new Date(o.delivery_datetime).getTime();
+        const alertThreshold = deliveryTime - (o.alert_lead_minutes * 60 * 1000);
+        return now >= alertThreshold;
+      });
+    } catch(e) {
+      return [];
+    }
   }
 
 };

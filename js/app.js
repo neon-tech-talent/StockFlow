@@ -28,6 +28,32 @@ const App = {
     // 3. Iniciar routing
     window.addEventListener('hashchange', () => this._route());
     this._route();
+
+    // 4. Iniciar monitor de alertas de encargos en tiempo real
+    this._startAlertsWatcher();
+  },
+
+  _startAlertsWatcher() {
+    const checkAlerts = async () => {
+      try {
+        if (typeof DB !== 'undefined' && typeof DB.getCustomOrderAlerts === 'function') {
+          const alerts = await DB.getCustomOrderAlerts();
+          const badge = document.getElementById('bell-alert-badge');
+          if (badge) {
+            if (alerts.length > 0) {
+              badge.textContent = alerts.length;
+              badge.style.display = 'flex';
+            } else {
+              badge.style.display = 'none';
+            }
+          }
+        }
+      } catch (e) {}
+    };
+
+    checkAlerts();
+    if (this._alertInterval) clearInterval(this._alertInterval);
+    this._alertInterval = setInterval(checkAlerts, 30000);
   },
 
   async _loadSidebar(session) {
@@ -109,6 +135,7 @@ const App = {
       <div class="nav-item" id="nav-caja" onclick="location.hash='#caja'"><span class="nav-icon">💸</span><span>Caja</span></div>
       <div class="nav-item" id="nav-sales" onclick="location.hash='#sales'"><span class="nav-icon">📜</span><span>Historial Ventas</span></div>
       <div class="nav-item" data-page="new-sale" onclick="App.go('new-sale')"><span class="nav-icon">➕</span><span>Nueva Venta</span></div>
+      <div class="nav-item" data-page="encargos" onclick="App.go('encargos')"><span class="nav-icon">📋</span><span>Encargos</span></div>
       ${turnosEnabled ? '<div class="nav-item" id="nav-turnos" onclick="location.hash=\'#turnos\'"><span class="nav-icon">📅</span><span>Turnos</span></div>' : ''}
       <div class="nav-item" data-page="clients" onclick="App.go('clients')"><span class="nav-icon">👥</span><span>Clientes</span></div>
       <div class="nav-item" data-page="stats" onclick="App.go('stats')"><span class="nav-icon">📊</span><span>Estadísticas</span></div>`;
@@ -125,6 +152,7 @@ const App = {
       caja: 'Control de Caja',
       sales: 'Historial de Ventas',
       'new-sale': 'Nueva Venta',
+      encargos: 'Gestión de Encargos',
       turnos: 'Gestión de Turnos',
       clients: 'Clientes',
       stats: 'Estadísticas',
@@ -168,6 +196,7 @@ const App = {
         case 'caja':     await CajaModule.render(content);         break;
         case 'sales':    await SalesModule.renderHistory(content); break;
         case 'new-sale': await SalesModule.renderNewSale(content); break;
+        case 'encargos': await EncargosModule.render(content);     break;
         case 'clients':  await ClientsModule.render(content);      break;
         case 'stats':    await StatsModule.render(content);        break;
         default:         await StockModule.render(content);
