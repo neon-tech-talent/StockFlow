@@ -762,7 +762,11 @@ const DB = {
 
       // Si hubo seña en efectivo, registrar ingreso en caja
       if (depositAmount > 0 && payload.deposit_payment_type === 'efectivo') {
-        await this.addCashMovement(depositAmount, 'venta', `Seña Encargo #${savedOrder.order_number || ''} (${savedOrder.client_name})`);
+        await this.saveCashMovement({
+          amount: depositAmount,
+          type: 'venta',
+          reason: `Seña Encargo #${savedOrder.order_number || ''} (${savedOrder.client_name})`
+        });
       }
     } else {
       const { data, error } = await this.client.from('custom_orders').update(payload).eq('id', orderData.id).eq('admin_id', this._adminId()).select().single();
@@ -798,45 +802,33 @@ const DB = {
 
     const items = order.custom_order_items || [];
 
-    // 1. Descontar stock físico de cada producto
-    for (const item of items) {
-      if (item.product_id) {
-        await this.adjustStock(item.product_id, -Math.abs(item.quantity));
-      }
-    }
-
-    // 2. Registrar venta oficial en tabla 'sales' y 'sale_items'
+    // Formatear ítems para saveSale (saveSale descuenta el stock automáticamente y registra la venta)
     const saleCart = items.map(it => ({
       productId: it.product_id,
       productName: it.product_name,
-      unitPrice: it.unit_price,
-      quantity: it.quantity,
+      unitPrice: parseFloat(it.unit_price) || 0,
+      quantity: parseFloat(it.quantity) || 1,
       unit: 'Unidades',
       discountType: 'none',
       discountValue: 0
     }));
 
-    const saleResult = await this.saveSale({
-      total: order.total_amount,
+    // Registrar venta oficial en 'sales' y descontar inventario
+    const saleId = await this.saveSale({
+      total: parseFloat(order.total_amount) || 0,
       paymentType: remainingPaymentType,
       clientId: order.client_id,
       clientName: order.client_name,
       invoiced: false
     }, saleCart);
 
-    // 3. Si hubo saldo restante y el medio de cobro es efectivo, registrar movimiento en caja
-    const remaining = parseFloat(order.remaining_amount) || 0;
-    if (remaining > 0 && remainingPaymentType === 'efectivo') {
-      await this.addCashMovement(remaining, 'venta', `Cobro Saldo Encargo #${order.order_number || ''} (${order.client_name})`);
-    }
-
-    // 4. Marcar encargo como completado
+    // Marcar encargo como completado
     const { data: completedOrder, error } = await this.client
       .from('custom_orders')
       .update({
         status: 'completado',
         completed_at: new Date().toISOString(),
-        sale_id: saleResult?.id || null
+        sale_id: saleId || null
       })
       .eq('id', orderId)
       .eq('admin_id', this._adminId())
