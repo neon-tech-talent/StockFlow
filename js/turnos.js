@@ -276,7 +276,10 @@ const TurnosModule = {
               <div style="font-size:0.875rem; color:var(--accent); font-weight:600; margin-top:0.2rem;">
                 👤 Responsable: <strong>${Utils.escHtml(a.professional_name || 'No asignado')}</strong>
               </div>
-              ${a.price > 0 ? `<div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.15rem;">${Utils.currency(a.price)}</div>` : ''}
+              <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.4rem; margin-top:0.15rem;">
+                ${a.duration_minutes ? `<small class="text-muted">⏱️ ${a.duration_minutes} min</small>` : ''}
+                ${a.price > 0 ? `<strong style="font-size:0.95rem; color:var(--accent);">${Utils.currency(a.price)}</strong>` : ''}
+              </div>
             </div>
           </div>
 
@@ -324,7 +327,7 @@ const TurnosModule = {
 
           <form id="form-quick-appt" onsubmit="TurnosModule.handleFormSubmit(event)">
             
-            <!-- Datos del Cliente (Selector de Clientes Existentes o Escritura Libre) -->
+            <!-- Datos del Cliente -->
             <div class="form-group">
               <label>Cliente *</label>
               ${clients.length ? `
@@ -355,16 +358,28 @@ const TurnosModule = {
               </div>
             </div>
 
-            <!-- Servicio -->
+            <!-- Servicio Solicitado -->
             <div class="form-group">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
                 <label style="margin:0;">Servicio Solicitado *</label>
                 <a href="javascript:void(0)" onclick="TurnosModule.openNewServiceModal()" style="font-size:0.78rem; color:var(--accent); font-weight:600; text-decoration:none;">➕ Crear nuevo servicio</a>
               </div>
-              <select id="qa-service" name="service_id" class="form-input" required>
+              <select id="qa-service" name="service_id" class="form-input" required onchange="TurnosModule.onServiceSelect(this)">
                 <option value="">-- Seleccionar Servicio --</option>
                 ${services.map(s => `<option value="${s.id}" data-name="${Utils.escHtml(s.name)}" data-price="${s.price || 0}" data-duration="${s.duration_minutes || 30}">${Utils.escHtml(s.name)} (${Utils.currency(s.price || 0)} - ${s.duration_minutes || 30} min)</option>`).join('')}
               </select>
+            </div>
+
+            <!-- Modificación de Monto y Tiempo para este Turno -->
+            <div class="form-row" style="background:var(--bg-main); padding:0.85rem 1rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle); margin-bottom:1rem;">
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:0.8rem;">Monto / Precio ($)</label>
+                <input id="qa-service-price" name="service_price" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" value="0.00">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:0.8rem;">Tiempo / Duración (min)</label>
+                <input id="qa-service-duration" name="service_duration" type="number" step="5" min="5" class="form-input" placeholder="30" value="30">
+              </div>
             </div>
 
             <!-- Responsable -->
@@ -400,11 +415,17 @@ const TurnosModule = {
               <h4 class="card-title" style="margin:0; font-size:0.9rem;">👥 Responsables (${profs.length})</h4>
               <button class="btn btn-xs btn-outline" onclick="TurnosModule.openNewProfModal()">➕ Agregar</button>
             </div>
-            <div style="display:flex; flex-direction:column; gap:0.45rem; max-height:170px; overflow-y:auto;">
+            <div style="display:flex; flex-direction:column; gap:0.45rem; max-height:190px; overflow-y:auto;">
               ${profs.length ? profs.map(p => `
                 <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-xs); border:1px solid var(--border-subtle);">
-                  <span>👤 <strong>${Utils.escHtml(p.first_name + ' ' + (p.last_name || ''))}</strong></span>
-                  ${p.phone ? `<small class="text-muted">${Utils.escHtml(p.phone)}</small>` : ''}
+                  <div>
+                    <span>👤 <strong>${Utils.escHtml(p.first_name + ' ' + (p.last_name || ''))}</strong></span>
+                    ${p.phone ? `<small class="text-muted" style="display:block; font-size:0.75rem;">${Utils.escHtml(p.phone)}</small>` : ''}
+                  </div>
+                  <div style="display:flex; gap:0.35rem;">
+                    <button type="button" class="btn-sm btn-outline" style="padding:2px 6px; font-size:0.75rem;" onclick="TurnosModule.openEditProfModal('${p.id}')" title="Editar responsable">✏️</button>
+                    <button type="button" class="btn-sm btn-outline" style="padding:2px 6px; font-size:0.75rem; color:var(--red); border-color:rgba(244,63,94,0.3);" onclick="TurnosModule.deleteProfPrompt('${p.id}')" title="Eliminar responsable">🗑️</button>
+                  </div>
                 </div>
               `).join('') : '<span class="text-muted" style="font-size:0.85rem;">No hay responsables registrados.</span>'}
             </div>
@@ -416,14 +437,19 @@ const TurnosModule = {
               <h4 class="card-title" style="margin:0; font-size:0.9rem;">💼 Servicios (${services.length})</h4>
               <button class="btn btn-xs btn-outline" onclick="TurnosModule.openNewServiceModal()">➕ Agregar</button>
             </div>
-            <div style="display:flex; flex-direction:column; gap:0.45rem; max-height:170px; overflow-y:auto;">
+            <div style="display:flex; flex-direction:column; gap:0.45rem; max-height:190px; overflow-y:auto;">
               ${services.length ? services.map(s => `
                 <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-xs); border:1px solid var(--border-subtle);">
                   <div>
                     <strong>${Utils.escHtml(s.name)}</strong>
-                    <small class="text-muted">(${s.duration_minutes || 30} min)</small>
+                    <div style="font-size:0.78rem; color:var(--accent);">
+                      ${Utils.currency(s.price || 0)} <span class="text-muted">(${s.duration_minutes || 30} min)</span>
+                    </div>
                   </div>
-                  <strong style="color:var(--accent); font-size:0.9rem;">${Utils.currency(s.price || 0)}</strong>
+                  <div style="display:flex; gap:0.35rem;">
+                    <button type="button" class="btn-sm btn-outline" style="padding:2px 6px; font-size:0.75rem;" onclick="TurnosModule.openEditServiceModal('${s.id}')" title="Editar servicio">✏️</button>
+                    <button type="button" class="btn-sm btn-outline" style="padding:2px 6px; font-size:0.75rem; color:var(--red); border-color:rgba(244,63,94,0.3);" onclick="TurnosModule.deleteServicePrompt('${s.id}')" title="Eliminar servicio">🗑️</button>
+                  </div>
                 </div>
               `).join('') : '<span class="text-muted" style="font-size:0.85rem;">No hay servicios registrados.</span>'}
             </div>
@@ -432,6 +458,15 @@ const TurnosModule = {
         </div>
 
       </div>`;
+  },
+
+  onServiceSelect(sel) {
+    if (!sel || !sel.value) return;
+    const opt = sel.selectedOptions[0];
+    const priceInput = document.getElementById('qa-service-price');
+    const durationInput = document.getElementById('qa-service-duration');
+    if (priceInput) priceInput.value = parseFloat(opt.dataset.price) || 0;
+    if (durationInput) durationInput.value = parseInt(opt.dataset.duration) || 30;
   },
 
   onClientSelect(sel) {
@@ -465,6 +500,10 @@ const TurnosModule = {
     const profSelect = f.prof_id;
     const notes = f.notes.value.trim();
 
+    // Valores editables de Monto y Tiempo para este turno específico
+    const price = parseFloat(f.service_price?.value) || 0;
+    const duration = parseInt(f.service_duration?.value) || 30;
+
     if (!clientName || !apptDate || !apptTime || !serviceSelect.value || !profSelect.value) {
       if (typeof Toast !== 'undefined') Toast.show('Por favor completa todos los campos obligatorios', 'warning');
       return;
@@ -475,8 +514,6 @@ const TurnosModule = {
     const profOpt = profSelect.selectedOptions[0];
 
     const serviceName = serviceOpt.dataset.name;
-    const price = parseFloat(serviceOpt.dataset.price) || 0;
-    const duration = parseInt(serviceOpt.dataset.duration) || 30;
     const profName = profOpt.dataset.name;
 
     const endIso = new Date(new Date(startIso).getTime() + duration * 60000).toISOString();
@@ -534,7 +571,7 @@ const TurnosModule = {
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px dashed var(--border-subtle); padding-bottom:0.35rem;">
               <div>
                 <strong style="color:var(--text-main);">${Utils.escHtml(em.client_name)}</strong>
-                <small class="text-muted" style="display:block;">💼 ${Utils.escHtml(em.service_name || 'Servicio')}</small>
+                <small class="text-muted" style="display:block;">💼 ${Utils.escHtml(em.service_name || 'Servicio')} (${em.duration_minutes || 30} min - ${Utils.currency(em.price || 0)})</small>
               </div>
               <div style="text-align:right;">
                 <span class="badge" style="background:rgba(212,175,55,0.15); color:var(--accent); font-size:0.75rem;">
@@ -587,36 +624,47 @@ const TurnosModule = {
     }
   },
 
-  /* ── MODAL: NUEVO RESPONSABLE / PROFESIONAL EN EL ACTO ── */
+  /* ── MODAL: NUEVO / EDITAR RESPONSABLE ── */
   openNewProfModal() {
+    this._renderProfFormModal(null);
+  },
+
+  async openEditProfModal(profId) {
+    const profs = await DB.getTurnosProfessionals();
+    const p = profs.find(x => x.id === profId);
+    if (!p) return;
+    this._renderProfFormModal(p);
+  },
+
+  _renderProfFormModal(prof = null) {
     Modal.open(`
-      <h2 class="modal-title">➕ Nuevo Responsable / Profesional</h2>
+      <h2 class="modal-title">${prof ? '✏️ Editar Responsable' : '➕ Nuevo Responsable / Profesional'}</h2>
       <p class="text-muted" style="margin-top:-0.8rem; margin-bottom:1.25rem; font-size:0.85rem;">
-        Agrega un integrante del equipo para asignarle turnos.
+        ${prof ? 'Modifica los datos del integrante del equipo.' : 'Agrega un integrante del equipo para asignarle turnos.'}
       </p>
-      <form onsubmit="TurnosModule.saveNewProf(event)">
+      <form onsubmit="TurnosModule.saveProf(event, '${prof?.id || ''}')">
         <div class="form-row">
           <div class="form-group">
             <label>Nombre *</label>
-            <input id="np-first" name="first_name" class="form-input" required placeholder="Ej: Carlos">
+            <input id="np-first" name="first_name" class="form-input" required placeholder="Ej: Carlos" value="${Utils.escHtml(prof?.first_name || '')}">
           </div>
           <div class="form-group">
             <label>Apellido</label>
-            <input id="np-last" name="last_name" class="form-input" placeholder="Ej: Gómez">
+            <input id="np-last" name="last_name" class="form-input" placeholder="Ej: Gómez" value="${Utils.escHtml(prof?.last_name || '')}">
           </div>
         </div>
         <div class="form-group">
           <label>Teléfono (Opcional)</label>
-          <input id="np-phone" name="phone" class="form-input" placeholder="Ej: 11 2345-6789">
+          <input id="np-phone" name="phone" class="form-input" placeholder="Ej: 11 2345-6789" value="${Utils.escHtml(prof?.phone || '')}">
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar Responsable</button>
+          <button type="submit" class="btn btn-primary">${prof ? 'Guardar Cambios' : 'Guardar Responsable'}</button>
         </div>
       </form>`);
   },
 
-  async saveNewProf(e) {
+  async saveProf(e, profId = null) {
     e.preventDefault();
     const f = e.target;
     const firstName = f.first_name.value.trim();
@@ -625,6 +673,7 @@ const TurnosModule = {
 
     try {
       await DB.saveTurnosProfessional({
+        id: profId || null,
         first_name: firstName,
         last_name: lastName,
         phone: phone,
@@ -632,7 +681,7 @@ const TurnosModule = {
       });
 
       Modal.close();
-      if (typeof Toast !== 'undefined') Toast.show(`Responsable ${firstName} creado con éxito`, 'success');
+      if (typeof Toast !== 'undefined') Toast.show(`Responsable ${firstName} ${profId ? 'actualizado' : 'creado'} con éxito`, 'success');
       await this.render(document.getElementById('content'), this._activeTab);
     } catch (err) {
       console.error("Error al guardar responsable:", err);
@@ -640,33 +689,59 @@ const TurnosModule = {
     }
   },
 
-  /* ── MODAL: NUEVO SERVICIO EN EL ACTO ── */
+  async deleteProfPrompt(profId) {
+    if (!confirm('¿Estás seguro de eliminar este responsable?')) return;
+    try {
+      await DB.deleteTurnosProfessional(profId);
+      if (typeof Toast !== 'undefined') Toast.show('Responsable eliminado', 'info');
+      await this.render(document.getElementById('content'), this._activeTab);
+    } catch (err) {
+      console.error("Error al eliminar responsable:", err);
+      if (typeof Toast !== 'undefined') Toast.show('Error al eliminar', 'danger');
+    }
+  },
+
+  /* ── MODAL: NUEVO / EDITAR SERVICIO ── */
   openNewServiceModal() {
+    this._renderServiceFormModal(null);
+  },
+
+  async openEditServiceModal(serviceId) {
+    const services = await DB.getTurnosServices();
+    const s = services.find(x => x.id === serviceId);
+    if (!s) return;
+    this._renderServiceFormModal(s);
+  },
+
+  _renderServiceFormModal(service = null) {
     Modal.open(`
-      <h2 class="modal-title">💼 Nuevo Servicio</h2>
-      <form onsubmit="TurnosModule.saveNewService(event)">
+      <h2 class="modal-title">${service ? '✏️ Editar Servicio' : '💼 Nuevo Servicio'}</h2>
+      <p class="text-muted" style="margin-top:-0.8rem; margin-bottom:1.25rem; font-size:0.85rem;">
+        ${service ? 'Modifica el nombre, precio o duración predeterminada del servicio.' : 'Define el nombre, precio y duración predeterminada.'}
+      </p>
+      <form onsubmit="TurnosModule.saveService(event, '${service?.id || ''}')">
         <div class="form-group">
           <label>Nombre del Servicio *</label>
-          <input id="ns-name" name="name" class="form-input" required placeholder="Ej: Corte y Barba, Masaje...">
+          <input id="ns-name" name="name" class="form-input" required placeholder="Ej: Corte y Barba, Masaje..." value="${Utils.escHtml(service?.name || '')}">
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Precio ($) *</label>
-            <input id="ns-price" name="price" type="number" step="0.01" min="0" class="form-input" required placeholder="0.00">
+            <label>Precio Predeterminado ($) *</label>
+            <input id="ns-price" name="price" type="number" step="0.01" min="0" class="form-input" required placeholder="0.00" value="${service?.price || 0}">
           </div>
           <div class="form-group">
-            <label>Duración (Minutos) *</label>
-            <input id="ns-duration" name="duration_minutes" type="number" step="5" min="5" value="30" class="form-input" required placeholder="30">
+            <label>Duración Predeterminada (Minutos) *</label>
+            <input id="ns-duration" name="duration_minutes" type="number" step="5" min="5" value="${service?.duration_minutes || 30}" class="form-input" required placeholder="30">
           </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar Servicio</button>
+          <button type="submit" class="btn btn-primary">${service ? 'Guardar Cambios' : 'Guardar Servicio'}</button>
         </div>
       </form>`);
   },
 
-  async saveNewService(e) {
+  async saveService(e, serviceId = null) {
     e.preventDefault();
     const f = e.target;
     const name = f.name.value.trim();
@@ -675,6 +750,7 @@ const TurnosModule = {
 
     try {
       await DB.saveTurnosService({
+        id: serviceId || null,
         name: name,
         price: price,
         duration_minutes: duration,
@@ -682,11 +758,23 @@ const TurnosModule = {
       });
 
       Modal.close();
-      if (typeof Toast !== 'undefined') Toast.show(`Servicio "${name}" creado con éxito`, 'success');
+      if (typeof Toast !== 'undefined') Toast.show(`Servicio "${name}" ${serviceId ? 'actualizado' : 'creado'} con éxito`, 'success');
       await this.render(document.getElementById('content'), this._activeTab);
     } catch (err) {
       console.error("Error al guardar servicio:", err);
       if (typeof Toast !== 'undefined') Toast.show('Error al guardar servicio', 'danger');
+    }
+  },
+
+  async deleteServicePrompt(serviceId) {
+    if (!confirm('¿Estás seguro de eliminar este servicio?')) return;
+    try {
+      await DB.deleteTurnosService(serviceId);
+      if (typeof Toast !== 'undefined') Toast.show('Servicio eliminado', 'info');
+      await this.render(document.getElementById('content'), this._activeTab);
+    } catch (err) {
+      console.error("Error al eliminar servicio:", err);
+      if (typeof Toast !== 'undefined') Toast.show('Error al eliminar', 'danger');
     }
   },
 
