@@ -1,9 +1,11 @@
 const TurnosModule = {
   _activeTab: 'agenda', // 'agenda' | 'cargar'
   _selectedDate: new Date().toISOString().slice(0, 10),
+  _calYear: new Date().getFullYear(),
+  _calMonth: new Date().getMonth(), // 0 to 11
   _selectedProfId: '',
   _searchQuery: '',
-  _statusFilter: 'activos', // 'activos' | 'todos' | 'cancelado'
+  _statusFilter: 'activos', // 'activos' | 'todos' | 'atendido' | 'cancelado'
   _selectedClientId: null,
 
   async render(el, activeTab = null) {
@@ -29,7 +31,7 @@ const TurnosModule = {
       <div class="module-header" style="margin-bottom:1.25rem;">
         <div>
           <h2 class="card-title" style="margin:0; font-size:1.15rem;">📅 Gestión de Turnos</h2>
-          <small class="text-muted">Agenda de turnos, calendario, responsables y servicios</small>
+          <small class="text-muted">Agenda de turnos, calendario interactivo, responsables y servicios</small>
         </div>
         <div class="btn-row">
           <button class="btn btn-outline btn-sm" onclick="TurnosModule.openNewProfModal()">➕ Nuevo Responsable</button>
@@ -54,8 +56,10 @@ const TurnosModule = {
     await this._renderActiveTab(profs, services, clients, defaultTime);
   },
 
-  async switchTab(tab) {
+  async switchTab(tab, presetDate = null) {
     this._activeTab = tab;
+    if (presetDate) this._selectedDate = presetDate;
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${tab}'`));
     });
@@ -86,119 +90,228 @@ const TurnosModule = {
   },
 
   /* ─────────────────────────────────────────────────────────────
-     PESTAÑA 1: CALENDARIO, FILTROS Y LISTA DE TURNOS
+     PESTAÑA 1: CALENDARIO INTERACTIVO Y LISTA DE TURNOS DESPLEGADA
   ───────────────────────────────────────────────────────────── */
   async _renderAgendaTab(box, profs) {
     box.innerHTML = `
-      <!-- Tarjeta de Filtros y Buscador de Turnos -->
-      <div class="card" style="padding:1.25rem; margin-bottom:1.25rem;">
-        <div style="display:flex; gap:0.85rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+      <!-- Barra Superior de Filtros y Búsqueda -->
+      <div class="card" style="padding:1.15rem 1.25rem; margin-bottom:1.25rem;">
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
           
-          <!-- Filtro por Fecha -->
-          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-            <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Fecha:</label>
-            <input type="date" id="filter-date" class="form-input" style="width:auto; padding:0.45rem 0.75rem;" value="${this._selectedDate}">
-            <div class="btn-row" style="gap:0.3rem;">
-              <button class="btn btn-sm ${this._selectedDate === new Date().toISOString().slice(0, 10) ? 'btn-primary' : 'btn-outline'}" onclick="TurnosModule.setDateQuick('today')">⚡ Hoy</button>
-              <button class="btn btn-sm ${this._selectedDate === new Date(Date.now() + 86400000).toISOString().slice(0, 10) ? 'btn-primary' : 'btn-outline'}" onclick="TurnosModule.setDateQuick('tomorrow')">Mañana</button>
-              <button class="btn btn-sm ${this._selectedDate === '' ? 'btn-primary' : 'btn-outline'}" onclick="TurnosModule.setDateQuick('all')">Ver Todos</button>
-            </div>
+          <!-- Buscador Rápido -->
+          <div style="flex:1.2; min-width:240px;">
+            <input id="filter-search" type="text" placeholder="🔍 Buscar cliente, teléfono, servicio o responsable..." class="form-input" style="padding:0.5rem 0.85rem;" value="${Utils.escHtml(this._searchQuery)}">
           </div>
 
           <!-- Filtro por Responsable -->
           <div style="display:flex; align-items:center; gap:0.5rem;">
-            <label style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Responsable:</label>
-            <select id="filter-prof" class="form-input" style="width:auto; padding:0.45rem 0.75rem;" onchange="TurnosModule.onProfFilterChange(this.value)">
-              <option value="">Todos los Responsables</option>
+            <select id="filter-prof" class="form-input" style="width:auto; padding:0.5rem 0.85rem;" onchange="TurnosModule.onProfFilterChange(this.value)">
+              <option value="">👤 Todos los Responsables</option>
               ${profs.map(p => `<option value="${p.id}" ${this._selectedProfId === p.id ? 'selected' : ''}>${Utils.escHtml(p.first_name + ' ' + (p.last_name || ''))}</option>`).join('')}
             </select>
           </div>
-        </div>
 
-        <!-- Buscador y Estado -->
-        <div style="margin-top:0.85rem; padding-top:0.85rem; border-top:1px solid var(--border-subtle); display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-          <div style="flex:1; min-width:240px;">
-            <input id="filter-search" type="text" placeholder="Buscar por nombre de cliente, teléfono o servicio..." class="form-input" style="padding:0.5rem 0.85rem;" value="${Utils.escHtml(this._searchQuery)}">
+          <!-- Filtro por Estado -->
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <select id="filter-status" class="form-input" style="width:auto; padding:0.5rem 0.85rem;" onchange="TurnosModule.onStatusFilterChange(this.value)">
+              <option value="activos" ${this._statusFilter === 'activos' ? 'selected' : ''}>Pendientes / Activos</option>
+              <option value="todos" ${this._statusFilter === 'todos' ? 'selected' : ''}>Todos los Estados</option>
+              <option value="atendido" ${this._statusFilter === 'atendido' ? 'selected' : ''}>✅ Atendidos / Cobrados</option>
+              <option value="cancelado" ${this._statusFilter === 'cancelado' ? 'selected' : ''}>❌ Cancelados</option>
+            </select>
           </div>
-          <select id="filter-status" class="form-input" style="width:auto; min-width:170px; padding:0.5rem 0.85rem;" onchange="TurnosModule.onStatusFilterChange(this.value)">
-            <option value="activos" ${this._statusFilter === 'activos' ? 'selected' : ''}>Pendientes / Activos</option>
-            <option value="todos" ${this._statusFilter === 'todos' ? 'selected' : ''}>Todos los Estados</option>
-            <option value="atendido" ${this._statusFilter === 'atendido' ? 'selected' : ''}>Atendidos / Cobrados</option>
-            <option value="cancelado" ${this._statusFilter === 'cancelado' ? 'selected' : ''}>Cancelados</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar')" style="white-space:nowrap;">
+
+          <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar', TurnosModule._selectedDate)" style="white-space:nowrap;">
             ➕ Agendar Nuevo Turno
           </button>
         </div>
       </div>
 
-      <!-- Contenedor de Lista de Turnos -->
-      <div id="turnos-list-container" style="display:flex; flex-direction:column; gap:0.85rem;">
-        <div class="empty-state">Cargando agenda...</div>
-      </div>`;
+      <!-- CALENDARIO INTERACTIVO MENSUAL -->
+      <div class="turnos-calendar-box" id="turnos-calendar-box">
+        <div id="calendar-grid-container"></div>
+      </div>
 
-    this._setupAgendaEvents();
-    await this._renderAppointmentsList();
+      <!-- SECCIÓN DESPLEGADA DE TURNOS DEL DÍA SELECCIONADO -->
+      <div id="turnos-day-details-container" style="display:flex; flex-direction:column; gap:0.85rem;"></div>`;
+
+    this._setupSearchListener();
+    await this._renderCalendar();
+    await this._renderSelectedDayAppointments();
   },
 
-  _setupAgendaEvents() {
-    const dateInput = document.getElementById('filter-date');
-    if (dateInput) {
-      dateInput.onchange = (e) => {
-        this._selectedDate = e.target.value;
-        this._renderAppointmentsList();
-      };
-    }
-
+  _setupSearchListener() {
     const searchInput = document.getElementById('filter-search');
     if (searchInput) {
       searchInput.oninput = (e) => {
         this._searchQuery = e.target.value.toLowerCase();
-        this._renderAppointmentsList();
+        this._renderCalendar();
+        this._renderSelectedDayAppointments();
       };
     }
   },
 
-  setDateQuick(mode) {
-    if (mode === 'today') {
-      this._selectedDate = new Date().toISOString().slice(0, 10);
-    } else if (mode === 'tomorrow') {
-      this._selectedDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    } else if (mode === 'all') {
-      this._selectedDate = '';
-    }
-    const dateInput = document.getElementById('filter-date');
-    if (dateInput) dateInput.value = this._selectedDate;
-    this.switchTab('agenda');
-  },
-
   onProfFilterChange(profId) {
     this._selectedProfId = profId;
-    this._renderAppointmentsList();
+    this._renderCalendar();
+    this._renderSelectedDayAppointments();
   },
 
   onStatusFilterChange(status) {
     this._statusFilter = status;
-    this._renderAppointmentsList();
+    this._renderCalendar();
+    this._renderSelectedDayAppointments();
   },
 
-  async _renderAppointmentsList() {
-    const container = document.getElementById('turnos-list-container');
-    if (!container) return;
+  /* ── RENDERIZADO DEL CALENDARIO VISUAL ── */
+  async _renderCalendar() {
+    const box = document.getElementById('calendar-grid-container');
+    if (!box) return;
 
-    let appts = await DB.getAppointments();
+    const appts = await this._getFilteredAppointments();
 
-    // Filtro por Fecha
-    if (this._selectedDate) {
-      appts = appts.filter(a => (a.start_datetime || '').slice(0, 10) === this._selectedDate);
+    // Mapear cantidad de turnos por fecha 'YYYY-MM-DD'
+    const dateCounts = {};
+    appts.forEach(a => {
+      const dStr = (a.start_datetime || '').slice(0, 10);
+      if (dStr) dateCounts[dStr] = (dateCounts[dStr] || 0) + 1;
+    });
+
+    const monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    const curMonthName = monthNames[this._calMonth];
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    // Calcular días del mes
+    const firstDayIndex = new Date(this._calYear, this._calMonth, 1).getDay(); // 0 Dom, 1 Lun...
+    const adjustedFirstDay = (firstDayIndex === 0) ? 6 : firstDayIndex - 1; // 0 Lun, ..., 6 Dom
+    const daysInMonth = new Date(this._calYear, this._calMonth + 1, 0).getDate();
+    const daysInPrevMonth = new Date(this._calYear, this._calMonth, 0).getDate();
+
+    let html = `
+      <!-- Cabecera de Navegación del Calendario -->
+      <div class="turnos-cal-header">
+        <div class="turnos-cal-title">
+          <span>📅 ${curMonthName} ${this._calYear}</span>
+        </div>
+        <div class="btn-row" style="gap:0.35rem;">
+          <button class="btn btn-sm btn-outline" onclick="TurnosModule.prevCalMonth()">◀ Anterior</button>
+          <button class="btn btn-sm btn-outline" onclick="TurnosModule.goTodayMonth()">⚡ Mes Actual</button>
+          <button class="btn btn-sm btn-outline" onclick="TurnosModule.nextCalMonth()">Siguiente ▶</button>
+        </div>
+      </div>
+
+      <!-- Días de la semana -->
+      <div class="turnos-cal-weekdays">
+        <div class="cal-weekday">Lun</div>
+        <div class="cal-weekday">Mar</div>
+        <div class="cal-weekday">Mié</div>
+        <div class="cal-weekday">Jue</div>
+        <div class="cal-weekday">Vie</div>
+        <div class="cal-weekday">Sáb</div>
+        <div class="cal-weekday" style="color:var(--accent);">Dom</div>
+      </div>
+
+      <!-- Grilla de Celdas del Calendario -->
+      <div class="turnos-cal-grid">`;
+
+    // 1. Días del mes anterior
+    for (let i = adjustedFirstDay - 1; i >= 0; i--) {
+      const prevDay = daysInPrevMonth - i;
+      html += `<div class="cal-day-cell cal-day-other-month"><span class="cal-day-number">${prevDay}</span></div>`;
     }
 
-    // Filtro por Responsable
+    // 2. Días del mes actual
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dStr = `${this._calYear}-${String(this._calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const count = dateCounts[dStr] || 0;
+      const isSelected = dStr === this._selectedDate;
+      const isToday = dStr === todayStr;
+      const hasEvents = count > 0;
+
+      let classes = ['cal-day-cell'];
+      if (isSelected) classes.push('cal-day-selected');
+      if (isToday) classes.push('cal-day-today');
+      if (hasEvents) classes.push('cal-day-has-events');
+
+      html += `
+        <div class="${classes.join(' ')}" onclick="TurnosModule.selectCalendarDay('${dStr}')" title="${count ? `${count} turnos agendados` : 'Sin turnos'}">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="cal-day-number">${day}</span>
+            ${isToday ? `<span style="font-size:0.65rem; color:var(--accent); font-weight:800;">HOY</span>` : ''}
+          </div>
+          <div>
+            ${hasEvents ? `<span class="cal-event-pill">📋 ${count} ${count === 1 ? 'turno' : 'turnos'}</span>` : ''}
+          </div>
+        </div>`;
+    }
+
+    // 3. Días del mes siguiente para completar la grilla de 7 columnas
+    const totalCells = adjustedFirstDay + daysInMonth;
+    const nextMonthCells = (totalCells % 7 === 0) ? 0 : 7 - (totalCells % 7);
+    for (let j = 1; j <= nextMonthCells; j++) {
+      html += `<div class="cal-day-cell cal-day-other-month"><span class="cal-day-number">${j}</span></div>`;
+    }
+
+    html += `</div>`;
+    box.innerHTML = html;
+  },
+
+  prevCalMonth() {
+    this._calMonth--;
+    if (this._calMonth < 0) {
+      this._calMonth = 11;
+      this._calYear--;
+    }
+    this._renderCalendar();
+  },
+
+  nextCalMonth() {
+    this._calMonth++;
+    if (this._calMonth > 11) {
+      this._calMonth = 0;
+      this._calYear++;
+    }
+    this._renderCalendar();
+  },
+
+  goTodayMonth() {
+    const now = new Date();
+    this._calMonth = now.getMonth();
+    this._calYear = now.getFullYear();
+    this._selectedDate = now.toISOString().slice(0, 10);
+    this._renderCalendar();
+    this._renderSelectedDayAppointments();
+  },
+
+  async selectCalendarDay(dateStr) {
+    this._selectedDate = dateStr;
+
+    // Actualizar clase seleccionada en la grilla
+    document.querySelectorAll('.cal-day-cell').forEach(c => c.classList.remove('cal-day-selected'));
+    const clickedCell = document.querySelector(`.cal-day-cell[onclick*="'${dateStr}'"]`);
+    if (clickedCell) clickedCell.classList.add('cal-day-selected');
+
+    await this._renderSelectedDayAppointments();
+
+    // Scroll suave hacia los detalles del día si está abajo
+    const detailsBox = document.getElementById('turnos-day-details-container');
+    if (detailsBox && window.innerWidth < 768) {
+      detailsBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  },
+
+  /* ── OBTENER TURNOS FILTRADOS ── */
+  async _getFilteredAppointments() {
+    let appts = await DB.getAppointments();
+
     if (this._selectedProfId) {
       appts = appts.filter(a => a.professional_id === this._selectedProfId);
     }
 
-    // Filtro por Estado
     if (this._statusFilter === 'activos') {
       appts = appts.filter(a => a.status !== 'cancelado' && a.status !== 'atendido' && a.status !== 'completado');
     } else if (this._statusFilter === 'atendido') {
@@ -207,7 +320,6 @@ const TurnosModule = {
       appts = appts.filter(a => a.status === 'cancelado');
     }
 
-    // Filtro por Buscador
     if (this._searchQuery) {
       appts = appts.filter(a => 
         (a.client_name || '').toLowerCase().includes(this._searchQuery) ||
@@ -217,23 +329,54 @@ const TurnosModule = {
       );
     }
 
-    if (!appts.length) {
-      container.innerHTML = Utils.emptyState(
-        '📅', 
-        'No hay turnos para los filtros seleccionados', 
-        'Puedes agendar un nuevo turno desde la pestaña "➕ Cargar Turno y Gestión"'
+    return appts;
+  },
+
+  /* ── RENDERIZAR LISTA DE TURNOS DEL DÍA SELECCIONADO ── */
+  async _renderSelectedDayAppointments() {
+    const container = document.getElementById('turnos-day-details-container');
+    if (!container) return;
+
+    const allAppts = await this._getFilteredAppointments();
+    const dayAppts = allAppts.filter(a => (a.start_datetime || '').slice(0, 10) === this._selectedDate);
+
+    const dateFormatted = new Date(`${this._selectedDate}T00:00:00`).toLocaleDateString('es-AR', {
+      weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+    });
+
+    const isToday = this._selectedDate === new Date().toISOString().slice(0, 10);
+
+    let html = `
+      <div class="cal-day-detail-header">
+        <div>
+          <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); font-weight:800;">
+            📅 Turnos del ${dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)} ${isToday ? '<span class="badge badge-success" style="font-size:0.75rem; margin-left:0.4rem;">HOY</span>' : ''}
+          </h3>
+          <small class="text-muted">${dayAppts.length} ${dayAppts.length === 1 ? 'turno agendado' : 'turnos agendados'} para este día</small>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar', '${this._selectedDate}')">
+          ➕ Agendar Turno para este día
+        </button>
+      </div>`;
+
+    if (!dayAppts.length) {
+      html += Utils.emptyState(
+        '🗓️',
+        `No hay turnos programados para el ${this._selectedDate}`,
+        'Puedes agendar un turno para este día haciendo clic en el botón superior'
       );
+      container.innerHTML = html;
       return;
     }
 
-    // Detectar turnos en paralelo (mismo horario exacto)
+    // Detectar turnos paralelos en el día
     const timeCountMap = {};
-    appts.forEach(a => {
+    dayAppts.forEach(a => {
       const timeKey = (a.start_datetime || '').slice(0, 16);
       timeCountMap[timeKey] = (timeCountMap[timeKey] || 0) + 1;
     });
 
-    container.innerHTML = appts.map(a => {
+    html += dayAppts.map(a => {
       const isCancelled = a.status === 'cancelado';
       const isCompleted = a.status === 'atendido' || a.status === 'completado';
       const timeKey = (a.start_datetime || '').slice(0, 16);
@@ -241,7 +384,6 @@ const TurnosModule = {
 
       const dateObj = new Date(a.start_datetime);
       const timeStr = dateObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-      const dateStr = dateObj.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
       let statusBadge = `<span class="badge badge-success">Confirmado</span>`;
       if (isCancelled) statusBadge = `<span class="badge badge-danger">Cancelado</span>`;
@@ -249,7 +391,7 @@ const TurnosModule = {
       else if (a.status === 'reprogramado') statusBadge = `<span class="badge badge-warning">Reprogramado</span>`;
 
       const phoneClean = (a.client_phone || '').replace(/\D/g, '');
-      const waLink = phoneClean ? `https://wa.me/${phoneClean.startsWith('54') ? phoneClean : '54' + phoneClean}?text=${encodeURIComponent(`¡Hola ${a.client_name}! Te recordamos tu turno de ${a.service_name} el día ${dateStr} a las ${timeStr} hs.`)}` : null;
+      const waLink = phoneClean ? `https://wa.me/${phoneClean.startsWith('54') ? phoneClean : '54' + phoneClean}?text=${encodeURIComponent(`¡Hola ${a.client_name}! Te recordamos tu turno de ${a.service_name} el día ${this._selectedDate} a las ${timeStr} hs.`)}` : null;
 
       return `
         <div class="card" style="padding:1.15rem 1.35rem; border-left: 5px solid ${isCancelled ? '#475569' : isCompleted ? 'var(--blue)' : 'var(--accent)'}; transition:all 0.2s ease;">
@@ -257,10 +399,9 @@ const TurnosModule = {
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.75rem; flex-wrap:wrap;">
             <div>
               <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.35rem; flex-wrap:wrap;">
-                <strong style="font-size:1.25rem; color:var(--accent-light); letter-spacing:-0.01em;">${timeStr} hs</strong>
-                ${!this._selectedDate ? `<small class="text-muted" style="font-weight:600;">(${dateStr})</small>` : ''}
+                <strong style="font-size:1.25rem; color:var(--accent-light); letter-spacing:-0.01em;">⏰ ${timeStr} hs</strong>
                 ${statusBadge}
-                ${isParallel ? `<span class="badge" style="background:rgba(212,175,55,0.15); color:var(--accent); border:1px solid var(--border);">⚡ Paralelo</span>` : ''}
+                ${isParallel ? `<span class="badge" style="background:rgba(212,175,55,0.15); color:var(--accent); border:1px solid var(--border);">⚡ Turno en Paralelo</span>` : ''}
               </div>
               <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); font-weight:700;">
                 ${Utils.escHtml(a.client_name)}
@@ -307,8 +448,10 @@ const TurnosModule = {
         </div>`;
     }).join('');
 
+    container.innerHTML = html;
+
     if (typeof Utils !== 'undefined' && typeof Utils.animateStagger === 'function') {
-      Utils.animateStagger('.card', 25);
+      Utils.animateStagger('#turnos-day-details-container .card', 25);
     }
   },
 
@@ -618,9 +761,12 @@ const TurnosModule = {
 
       // Actualizar fecha seleccionada para ver el turno en la agenda
       this._selectedDate = apptDate;
+      const dObj = new Date(`${apptDate}T00:00:00`);
+      this._calYear = dObj.getFullYear();
+      this._calMonth = dObj.getMonth();
 
       // Redirigir a la pestaña de Agenda
-      await this.switchTab('agenda');
+      await this.switchTab('agenda', apptDate);
     } catch (err) {
       console.error("Error al guardar turno:", err);
       if (typeof Toast !== 'undefined') Toast.show(err.message || 'Error al guardar el turno', 'danger');
@@ -787,7 +933,8 @@ const TurnosModule = {
     try {
       await DB.cancelAppointment(apptId, 'Cancelado por el administrador');
       if (typeof Toast !== 'undefined') Toast.show('Turno cancelado', 'info');
-      await this._renderAppointmentsList();
+      await this._renderCalendar();
+      await this._renderSelectedDayAppointments();
     } catch (err) {
       console.error("Error al cancelar turno:", err);
       if (typeof Toast !== 'undefined') Toast.show('Error al cancelar', 'danger');
@@ -860,7 +1007,8 @@ const TurnosModule = {
       await DB.completeAppointmentAndCreateSale(apptId, paymentType);
       Modal.close();
       if (typeof Toast !== 'undefined') Toast.show('¡Turno atendido y venta registrada exitosamente!', 'success');
-      await this._renderAppointmentsList();
+      await this._renderCalendar();
+      await this._renderSelectedDayAppointments();
     } catch (err) {
       console.error("Error al completar turno:", err);
       if (typeof Toast !== 'undefined') Toast.show(err.message || 'Error al completar turno', 'danger');

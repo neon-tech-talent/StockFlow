@@ -1377,6 +1377,152 @@ body.body-menu-open { overflow: hidden !important; touch-action: none; }
   flex-wrap: wrap;
 }
 
+/* ── TURNOS INTERACTIVE CALENDAR ── */
+.turnos-calendar-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.turnos-cal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.turnos-cal-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.turnos-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  text-align: center;
+}
+
+.cal-weekday {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.4rem 0;
+}
+
+.turnos-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.cal-day-cell {
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  min-height: 72px;
+  padding: 0.45rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  user-select: none;
+}
+
+.cal-day-cell:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-dim);
+  transform: translateY(-2px);
+}
+
+.cal-day-other-month {
+  opacity: 0.3;
+  background: transparent;
+  cursor: default;
+}
+.cal-day-other-month:hover {
+  transform: none;
+  border-color: var(--border-subtle);
+}
+
+.cal-day-number {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+.cal-day-today .cal-day-number {
+  color: var(--accent-light);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Días con turnos agendados */
+.cal-day-has-events {
+  background: rgba(212, 175, 55, 0.06);
+  border-color: rgba(212, 175, 55, 0.4);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.08);
+}
+
+.cal-day-has-events:hover {
+  background: rgba(212, 175, 55, 0.12);
+  border-color: var(--accent);
+}
+
+/* Día seleccionado activamente */
+.cal-day-selected {
+  border-color: var(--accent) !important;
+  background: rgba(212, 175, 55, 0.18) !important;
+  box-shadow: 0 0 16px var(--accent-glow) !important;
+}
+
+.cal-day-selected .cal-day-number {
+  color: #fff;
+  font-weight: 900;
+}
+
+.cal-event-pill {
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: #0b0f0b;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 0.25rem;
+  align-self: flex-start;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.cal-day-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
 /* ── RESPONSIVE RULES (TABLET & MOBILE) ── */
 @media (max-width: 992px) {
   .new-sale-layout { grid-template-columns: 1fr; }
