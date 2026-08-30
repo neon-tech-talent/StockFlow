@@ -41,14 +41,31 @@ const DB = {
     return data || [];
   },
   async saveProduct(p) {
-    const obj = { name: p.name, category_id: p.categoryId || null, sell_price: p.sellPrice, cost_price: p.costPrice, stock: p.stock, unit: p.unit };
-    if (p.id) await this.client.from('products').update(obj).eq('id', p.id).eq('admin_id', this._adminId());
-    else await this.client.from('products').insert({ ...obj, admin_id: this._adminId() });
+    const obj = { 
+      name: p.name, 
+      category_id: p.categoryId || null, 
+      sell_price: parseFloat(p.sellPrice) || 0, 
+      cost_price: parseFloat(p.costPrice) || 0, 
+      stock: parseFloat(p.stock) || 0, 
+      unit: p.unit || 'Unidades' 
+    };
+    if (p.id) {
+      const { data } = await this.client.from('products').update(obj).eq('id', p.id).eq('admin_id', this._adminId()).select().single();
+      return data;
+    } else {
+      const { data } = await this.client.from('products').insert({ ...obj, admin_id: this._adminId() }).select().single();
+      return data;
+    }
   },
   async deleteProduct(id) { await this.client.from('products').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustStock(id, delta) {
     const { data } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
-    if (data) await this.client.from('products').update({ stock: data.stock + delta }).eq('id', id).eq('admin_id', this._adminId());
+    if (data) {
+      const newStock = Math.max(0, (parseFloat(data.stock) || 0) + delta);
+      const { data: updated } = await this.client.from('products').update({ stock: newStock }).eq('id', id).eq('admin_id', this._adminId()).select().single();
+      return updated;
+    }
+    return null;
   },
 
   /* ── CLIENTS ── */

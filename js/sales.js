@@ -151,7 +151,10 @@ const SalesModule = {
       <div class="new-sale-layout">
         <div class="sale-left">
           <div class="card" style="margin-bottom:1rem">
-            <h3 class="card-title">📦 Seleccionar Productos</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.85rem; flex-wrap:wrap; gap:0.5rem;">
+              <h3 class="card-title" style="margin:0;">📦 Seleccionar Productos</h3>
+              <button type="button" class="btn btn-sm btn-primary" onclick="SalesModule.openExpressProductModal()" style="gap:0.35rem;">⚡ Carga Express</button>
+            </div>
             <input id="ps-q" type="text" placeholder="Buscar por nombre..." class="form-input" style="margin-bottom:.8rem">
             <div id="ps-grid" class="prod-grid"></div>
           </div>
@@ -190,18 +193,43 @@ const SalesModule = {
       </div>`;
         this._renderProdGrid(products);
         this._renderCart();
-        document.getElementById('ps-q').oninput = (e) => this._renderProdGrid(products.filter(p => p.name.toLowerCase().includes(e.target.value.toLowerCase())));
+        document.getElementById('ps-q').oninput = (e) => {
+            const val = e.target.value.toLowerCase();
+            this._renderProdGrid(products.filter(p => p.name.toLowerCase().includes(val)));
+        };
         document.getElementById('cl-s').oninput = (e) => this._searchClients(e.target.value);
     },
 
     async _renderProdGrid(list) {
         const el = document.getElementById('ps-grid'); if (!el) return;
-        el.innerHTML = list.map(p => `
-      <div class="prod-chip" tabindex="0" role="button" aria-label="Agregar ${Utils.escHtml(p.name)}" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
-        <div class="prod-chip-name">${Utils.escHtml(p.name)}</div>
-        <div class="prod-chip-stock">Stock: ${p.stock} ${Utils.escHtml(p.unit || 'Unidades')}</div>
-        <div class="prod-chip-price">${Utils.currency(p.sell_price)}</div>
-      </div>`).join('') || '<div class="empty-state">Sin resultados</div>';
+        const q = (document.getElementById('ps-q')?.value || '').trim();
+
+        if (!list.length) {
+            el.innerHTML = `
+              <div class="empty-state" style="padding: 1.5rem 1rem;">
+                <span class="empty-state-icon">🔍</span>
+                <strong>Sin resultados${q ? ` para "${Utils.escHtml(q)}"` : ''}</strong>
+                ${q ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:0.75rem;" onclick="SalesModule.openExpressProductModal('${Utils.escHtml(q)}')">⚡ Crear "${Utils.escHtml(q)}" como producto express</button>` : ''}
+              </div>`;
+            return;
+        }
+
+        el.innerHTML = list.map(p => {
+            const hasStock = p.stock > 0;
+            const stockDisplay = hasStock 
+                ? `<span class="prod-chip-stock">Stock: <strong>${p.stock}</strong> ${Utils.escHtml(p.unit || 'u.')}</span>`
+                : `<span class="badge badge-danger" style="font-size:0.7rem;">Sin Stock</span>`;
+
+            return `
+              <div class="prod-chip ${!hasStock ? 'prod-no-stock' : ''}" tabindex="0" role="button" aria-label="Agregar ${Utils.escHtml(p.name)}" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
+                <div class="prod-chip-name">${Utils.escHtml(p.name)}</div>
+                <div class="prod-chip-meta">
+                  ${stockDisplay}
+                  <button type="button" class="btn-add-stock" title="Cargar stock (+)" onclick="event.stopPropagation(); SalesModule.openQuickStockModal('${p.id}', '${Utils.escHtml(p.name)}', ${p.stock})">➕</button>
+                </div>
+                <div class="prod-chip-price">${Utils.currency(p.sell_price)}</div>
+              </div>`;
+        }).join('');
     },
 
     async addToCart(id, name, price) {
@@ -454,6 +482,168 @@ const SalesModule = {
             console.error(e);
             if (typeof Toast !== 'undefined') Toast.show('Error al registrar la venta', 'danger');
             else alert('Error al guardar la venta');
+        }
+    },
+
+    /* ── CARGA EXPRESS DE PRODUCTOS EN POS ── */
+    async openExpressProductModal(prefillName = '') {
+        const categories = await DB.getCategories();
+        Modal.open(`
+      <h2 class="modal-title">⚡ Carga Express de Producto</h2>
+      <p class="text-muted" style="font-size:0.85rem; margin-top:-0.8rem; margin-bottom:1.25rem;">
+        Crea el producto en el momento y súmalo directamente a tu venta actual.
+      </p>
+      <form onsubmit="SalesModule.saveExpressProduct(event)">
+        <div class="form-group">
+          <label>Nombre del Producto *</label>
+          <input id="exp-name" name="name" class="form-input" required value="${Utils.escHtml(prefillName)}" placeholder="Ej: Alfajor Chocolate">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Precio de Venta *</label>
+            <input id="exp-sell-price" name="sell_price" type="number" step="0.01" min="0" class="form-input" required placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>Stock Inicial *</label>
+            <input id="exp-stock" name="stock" type="number" step="1" min="1" value="1" class="form-input" required placeholder="1">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Categoría (Opcional)</label>
+            <select id="exp-category" name="category_id" class="form-input">
+              <option value="">-- Sin Categoría --</option>
+              ${categories.map(c => `<option value="${c.id}">${Utils.escHtml(c.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Unidad de Medida</label>
+            <select id="exp-unit" name="unit" class="form-input">
+              <option value="Unidades" selected>Unidades</option>
+              <option value="Kg">Kg</option>
+              <option value="Gramos">Gramos</option>
+              <option value="Litros">Litros</option>
+              <option value="Metros">Metros</option>
+              <option value="Porción">Porción</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Precio de Costo (Opcional)</label>
+          <input id="exp-cost-price" name="cost_price" type="number" step="0.01" min="0" class="form-input" placeholder="0.00">
+        </div>
+        <div style="background:var(--accent-subtle); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.65rem 0.85rem; margin-bottom:1.25rem; display:flex; align-items:center; gap:0.5rem;">
+          <span>🛒</span>
+          <small style="color:var(--accent-light); font-weight:600;">Se agregará 1 unidad automáticamente al carrito de venta actual.</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">⚡ Guardar y Sumar a Venta</button>
+        </div>
+      </form>`);
+    },
+
+    async saveExpressProduct(e) {
+        e.preventDefault();
+        const f = e.target;
+        const name = f.name.value.trim();
+        const sellPrice = parseFloat(f.sell_price.value) || 0;
+        const stock = parseFloat(f.stock.value) || 1;
+        const categoryId = f.category_id.value || null;
+        const unit = f.unit.value || 'Unidades';
+        const costPrice = parseFloat(f.cost_price.value) || 0;
+
+        if (!name || sellPrice <= 0) {
+            if (typeof Toast !== 'undefined') Toast.show('Ingresa un nombre y precio de venta válido', 'warning');
+            return;
+        }
+
+        try {
+            const newProd = await DB.saveProduct({
+                name,
+                sellPrice,
+                stock,
+                categoryId,
+                unit,
+                costPrice
+            });
+
+            Modal.close();
+            if (typeof Toast !== 'undefined') Toast.show(`¡Producto "${name}" creado con éxito!`, 'success');
+
+            // Refrescar listado local de productos
+            const products = await DB.getProducts();
+            const q = (document.getElementById('ps-q')?.value || '').toLowerCase();
+            this._renderProdGrid(q ? products.filter(p => p.name.toLowerCase().includes(q)) : products);
+
+            // Agregar automáticamente al carrito de venta
+            const prodId = newProd?.id || products.find(p => p.name.toLowerCase() === name.toLowerCase())?.id;
+            if (prodId) {
+                await this.addToCart(prodId, name, sellPrice);
+            }
+        } catch (err) {
+            console.error("Error al guardar producto express:", err);
+            if (typeof Toast !== 'undefined') Toast.show('Error al guardar el producto express', 'danger');
+        }
+    },
+
+    /* ── CARGA RÁPIDA DE STOCK (+) ── */
+    openQuickStockModal(productId, productName, currentStock) {
+        Modal.open(`
+      <h2 class="modal-title">➕ Cargar Stock Rápido</h2>
+      <div style="margin-bottom:1.25rem;">
+        <h4 style="color:var(--text-main); font-size:1.1rem; margin-bottom:0.25rem;">${Utils.escHtml(productName)}</h4>
+        <p class="text-muted" style="font-size:0.85rem;">Stock actual disponible: <strong style="color:var(--accent); font-size:1rem;">${currentStock}</strong></p>
+      </div>
+      <form onsubmit="SalesModule.saveQuickStock(event, '${productId}', '${Utils.escHtml(productName)}')">
+        <div class="form-group">
+          <label>Cantidad de Unidades a Ingresar *</label>
+          <input id="qs-qty" name="qty" type="number" step="1" min="1" value="10" class="form-input" required autofocus placeholder="Ej: 10">
+        </div>
+        <div style="margin: 1.1rem 0; display:flex; align-items:center; gap:0.5rem; background:rgba(0,0,0,0.2); padding:0.6rem 0.8rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+          <input type="checkbox" id="qs-add-cart" name="add_to_cart" checked style="width:1.15rem; height:1.15rem; cursor:pointer;">
+          <label for="qs-add-cart" style="font-weight:600; font-size:0.85rem; cursor:pointer; user-select:none; margin:0; color:var(--text-main);">
+            Sumar 1 unidad inmediatamente al carrito de venta actual
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">➕ Cargar Stock</button>
+        </div>
+      </form>`);
+    },
+
+    async saveQuickStock(e, productId, productName) {
+        e.preventDefault();
+        const f = e.target;
+        const addedQty = parseFloat(f.qty.value) || 0;
+        const addToCartChecked = f.add_to_cart?.checked;
+
+        if (addedQty <= 0) {
+            if (typeof Toast !== 'undefined') Toast.show('Ingresa una cantidad válida', 'warning');
+            return;
+        }
+
+        try {
+            await DB.adjustStock(productId, addedQty);
+            Modal.close();
+            if (typeof Toast !== 'undefined') Toast.show(`Stock de "${productName}" incrementado (+${addedQty})`, 'success');
+
+            // Refrescar lista de productos en Nueva Venta
+            const products = await DB.getProducts();
+            const q = (document.getElementById('ps-q')?.value || '').toLowerCase();
+            this._renderProdGrid(q ? products.filter(p => p.name.toLowerCase().includes(q)) : products);
+
+            // Si estaba marcado, sumar al carrito
+            if (addToCartChecked) {
+                const prod = products.find(p => p.id === productId);
+                if (prod) {
+                    await this.addToCart(productId, productName, prod.sell_price);
+                }
+            }
+        } catch (err) {
+            console.error("Error al ajustar stock:", err);
+            if (typeof Toast !== 'undefined') Toast.show('Error al actualizar el stock', 'danger');
         }
     }
 };
