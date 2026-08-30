@@ -142,6 +142,9 @@ const StatsModule = {
       </div>`;
 
             this._buildCharts(s);
+            if (typeof Utils !== 'undefined' && typeof Utils.animateStagger === 'function') {
+                Utils.animateStagger('.kpi-card', 40);
+            }
 
             const selM = document.getElementById('stat-month');
             const selY = document.getElementById('stat-year');

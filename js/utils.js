@@ -1,27 +1,61 @@
 const Utils = {
-    currency(n) { return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(n || 0); },
-    date(iso) { return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); },
-    dateShort(iso) { return new Date(iso).toLocaleDateString('es-AR'); },
+    currency(n) { 
+        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(n || 0); 
+    },
+    date(iso) { 
+        return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); 
+    },
+    dateShort(iso) { 
+        return new Date(iso).toLocaleDateString('es-AR'); 
+    },
     paymentLabel(t) {
         return { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta Corriente', qr: 'MercadoPago / QR' }[t] || t;
     },
     paymentIcon(t) {
         return { efectivo: '💵', debito: '💳', credito: '💳', transferencia: '🏦', cuenta_corriente: '📋', qr: '📱' }[t] || '💰';
     },
-    escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    escHtml(s) { 
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); 
+    },
     skeleton(rows = 4) {
         return `<div class="skeleton-container" aria-label="Cargando contenido">${Array.from({ length: rows }, () => `<div class="skeleton-row"></div>`).join('')}</div>`;
     },
     emptyState(icon = '📦', message = 'No hay registros disponibles', subtext = '') {
         return `<div class="empty-state">
             <span class="empty-state-icon" role="img" aria-hidden="true">${icon}</span>
-            <strong>${Utils.escHtml(message)}</strong>
-            ${subtext ? `<p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.2rem">${Utils.escHtml(subtext)}</p>` : ''}
+            <strong style="color:var(--text-main); font-size:1rem">${Utils.escHtml(message)}</strong>
+            ${subtext ? `<p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.25rem; max-width:400px">${Utils.escHtml(subtext)}</p>` : ''}
         </div>`;
+    },
+
+    /* ── ANIME.JS MICRO-INTERACTION HELPERS ── */
+    animatePage(container) {
+        if (!container || typeof anime === 'undefined') return;
+        anime({
+            targets: container,
+            opacity: [0, 1],
+            translateY: [12, 0],
+            duration: 320,
+            easing: 'easeOutCubic'
+        });
+    },
+
+    animateStagger(selector, delay = 45) {
+        if (typeof anime === 'undefined') return;
+        const els = document.querySelectorAll(selector);
+        if (!els.length) return;
+        anime({
+            targets: selector,
+            opacity: [0, 1],
+            translateY: [14, 0],
+            delay: anime.stagger(delay),
+            duration: 380,
+            easing: 'easeOutQuad'
+        });
     }
 };
 
-/* ── TOAST SYSTEM ── */
+/* ── TOAST SYSTEM (CON ANIME.JS) ── */
 const Toast = {
     _getContainer() {
         let c = document.getElementById('toast-container');
@@ -37,19 +71,41 @@ const Toast = {
     show(message, type = 'info', duration = 3200) {
         const c = this._getContainer();
         const toast = document.createElement('div');
-        const icons = { success: '✅', danger: '⚠️', warning: '⚡', info: 'ℹ️' };
+        const icons = { success: '✨', danger: '⚠️', warning: '⚡', info: 'ℹ️' };
         toast.className = `toast toast-${type}`;
         toast.innerHTML = `<span class="toast-icon">${icons[type] || 'ℹ️'}</span><span class="toast-message">${Utils.escHtml(message)}</span>`;
         c.appendChild(toast);
 
+        if (typeof anime !== 'undefined') {
+            anime({
+                targets: toast,
+                translateY: [24, 0],
+                opacity: [0, 1],
+                scale: [0.92, 1],
+                duration: 350,
+                easing: 'easeOutCubic'
+            });
+        }
+
         setTimeout(() => {
-            toast.classList.add('toast-out');
-            setTimeout(() => toast.remove(), 250);
+            if (typeof anime !== 'undefined') {
+                anime({
+                    targets: toast,
+                    translateX: [0, 40],
+                    opacity: [1, 0],
+                    duration: 240,
+                    easing: 'easeInQuad',
+                    complete: () => toast.remove()
+                });
+            } else {
+                toast.classList.add('toast-out');
+                setTimeout(() => toast.remove(), 250);
+            }
         }, duration);
     }
 };
 
-/* ── MODAL SYSTEM (ACCESSIBLE) ── */
+/* ── MODAL SYSTEM (ACCESSIBLE & ANIMATED) ── */
 const Modal = {
     _lastActiveElement: null,
 
@@ -69,6 +125,18 @@ const Modal = {
         </div>`;
         overlay.classList.add('active');
 
+        const box = overlay.querySelector('.modal-box');
+        if (box && typeof anime !== 'undefined') {
+            anime({
+                targets: box,
+                scale: [0.9, 1],
+                opacity: [0, 1],
+                translateY: [-15, 0],
+                duration: 320,
+                easing: 'easeOutCubic'
+            });
+        }
+
         // Focus inside modal
         const focusable = overlay.querySelector('input, select, textarea, button');
         if (focusable) focusable.focus();
@@ -86,14 +154,31 @@ const Modal = {
 
     close() {
         const o = document.getElementById('modal-overlay');
-        if (o) {
-            o.classList.remove('active');
+        if (o && o.classList.contains('active')) {
+            const box = o.querySelector('.modal-box');
             if (this._onKeyDown) window.removeEventListener('keydown', this._onKeyDown);
-            setTimeout(() => { o.innerHTML = ''; }, 250);
+
+            if (box && typeof anime !== 'undefined') {
+                anime({
+                    targets: box,
+                    scale: [1, 0.93],
+                    opacity: [1, 0],
+                    translateY: [0, 10],
+                    duration: 180,
+                    easing: 'easeInQuad',
+                    complete: () => {
+                        o.classList.remove('active');
+                        o.innerHTML = '';
+                    }
+                });
+            } else {
+                o.classList.remove('active');
+                setTimeout(() => { o.innerHTML = ''; }, 200);
+            }
+
             if (this._lastActiveElement && typeof this._lastActiveElement.focus === 'function') {
                 this._lastActiveElement.focus();
             }
         }
     }
 };
-

@@ -5,196 +5,229 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>FlowStock — Iniciar Sesión</title>
   <meta name="description" content="FlowStock — Plataforma de gestión para comercios">
-  <meta name="theme-color" content="#171f18">
+  <meta name="theme-color" content="#0c110d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap">
   <script src="js/env.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
   <script src="js/auth.js"></script>
   <style>
     :root {
-      --bg-base:    #171f18;
-      --bg-card:    #1e2a1f;
-      --accent:     #c8a96e;
-      --accent-dim: #a88a52;
-      --accent-glow:rgba(200,169,110,0.15);
-      --text-main:  #e8dcc4;
-      --text-muted: #9a8a70;
-      --border:     rgba(200,169,110,0.16);
-      --border-hover:rgba(200,169,110,0.36);
-      --radius:     12px;
+      --bg-base:        #0c110d;
+      --bg-card:        rgba(23, 32, 24, 0.85);
+      --accent:         #d4af37;
+      --accent-light:   #e5c07b;
+      --accent-dim:     #9a7b38;
+      --accent-glow:    rgba(212, 175, 55, 0.22);
+      --accent-glow-lg: rgba(212, 175, 55, 0.4);
+      --text-main:      #f3eee3;
+      --text-muted:     #9e927c;
+      --border:         rgba(212, 175, 55, 0.16);
+      --border-hover:   rgba(212, 175, 55, 0.42);
+      --radius:         16px;
+      --radius-sm:      10px;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg-base);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg-base);
       color: var(--text-main);
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1rem;
+      padding: 1.5rem;
+      position: relative;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
-    /* Background pattern */
+
+    /* Ambient atmospheric background glows */
     body::before {
       content: '';
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(ellipse at 20% 50%, rgba(200,169,110,0.06) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 20%, rgba(122,184,122,0.04) 0%, transparent 50%);
+        radial-gradient(ellipse at 30% 20%, rgba(212, 175, 55, 0.09) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, rgba(16, 185, 129, 0.07) 0%, transparent 65%);
       pointer-events: none;
     }
 
     .login-wrap {
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
       position: relative;
+      z-index: 10;
     }
 
     /* Brand header */
     .brand {
       text-align: center;
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }
     .brand-icon {
-      font-size: 3rem;
-      display: block;
-      margin-bottom: .75rem;
-      filter: drop-shadow(0 0 20px rgba(200,169,110,0.4));
-      animation: floatIcon 3s ease-in-out infinite;
-    }
-    @keyframes floatIcon {
-      0%, 100% { transform: translateY(0); }
-      50%       { transform: translateY(-6px); }
+      font-size: 3.2rem;
+      display: inline-block;
+      margin-bottom: 0.5rem;
+      filter: drop-shadow(0 0 25px rgba(212, 175, 55, 0.45));
     }
     .brand-name {
       font-family: 'Playfair Display', serif;
-      font-size: 2.2rem;
+      font-size: 2.3rem;
       color: var(--accent);
       letter-spacing: 0.08em;
-      line-height: 1;
+      line-height: 1.1;
+      font-weight: 700;
+      text-shadow: 0 4px 16px rgba(0,0,0,0.5);
     }
     .brand-tagline {
-      font-size: .8rem;
+      font-size: 0.8rem;
       color: var(--text-muted);
-      margin-top: .4rem;
+      margin-top: 0.4rem;
       letter-spacing: 0.12em;
       text-transform: uppercase;
+      font-weight: 600;
     }
 
-    /* Card */
+    /* Glassmorphism Card */
     .login-card {
       background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 2.25rem 2rem;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      box-shadow: 0 24px 60px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.06);
+      position: relative;
+      overflow: hidden;
     }
+
+    .login-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
     .login-card h2 {
       font-size: 1rem;
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 600;
       margin-bottom: 1.75rem;
       text-align: center;
+      letter-spacing: 0.02em;
     }
 
-    /* Form */
+    /* Form Inputs */
     .form-group { margin-bottom: 1.25rem; }
     .form-group label {
       display: block;
-      font-size: .78rem;
+      font-size: 0.78rem;
       color: var(--text-muted);
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: .06em;
-      margin-bottom: .4rem;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.45rem;
     }
     .form-input {
       width: 100%;
-      background: rgba(255,255,255,0.04);
+      background: rgba(12, 17, 13, 0.7);
       border: 1px solid var(--border);
       color: var(--text-main);
-      border-radius: 8px;
-      padding: .75rem 1rem;
-      font-size: .95rem;
+      border-radius: var(--radius-sm);
+      padding: 0.8rem 1rem;
+      font-size: 0.95rem;
       font-family: inherit;
-      transition: border-color .2s, box-shadow .2s;
+      transition: all 0.2s ease;
       outline: none;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
     }
     .form-input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-glow);
+      box-shadow: 0 0 0 3px var(--accent-glow), inset 0 1px 3px rgba(0,0,0,0.3);
+      background: rgba(18, 25, 19, 0.9);
     }
 
     /* Button */
     .btn-login {
       width: 100%;
-      padding: .85rem;
-      background: var(--accent);
-      color: #1a1208;
+      padding: 0.9rem;
+      background: linear-gradient(135deg, var(--accent) 0%, #b89328 100%);
+      color: #0c110d;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
       font-size: 1rem;
-      font-weight: 700;
+      font-weight: 800;
       font-family: inherit;
       cursor: pointer;
-      transition: all .2s;
-      margin-top: .5rem;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      margin-top: 0.6rem;
       letter-spacing: 0.04em;
+      box-shadow: 0 4px 18px var(--accent-glow);
     }
     .btn-login:hover {
-      background: #d4b87a;
+      background: linear-gradient(135deg, #dfbc45 0%, #c49f32 100%);
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(200,169,110,0.3);
+      box-shadow: 0 8px 24px var(--accent-glow-lg);
     }
     .btn-login:active { transform: translateY(0); }
     .btn-login:disabled {
-      opacity: .6;
+      opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
 
-    /* Error */
+    /* Error Message */
     .error-msg {
-      background: rgba(192,92,92,0.12);
-      border: 1px solid rgba(192,92,92,0.3);
-      color: #e07070;
-      border-radius: 8px;
-      padding: .65rem 1rem;
-      font-size: .85rem;
-      margin-bottom: 1rem;
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.35);
+      color: #fb7185;
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      margin-bottom: 1.25rem;
       display: none;
+      align-items: center;
+      gap: 0.5rem;
     }
-    .error-msg.visible { display: block; }
+    .error-msg.visible { display: flex; }
 
     /* Footer */
     .login-footer {
       text-align: center;
-      margin-top: 1.5rem;
-      font-size: .75rem;
+      margin-top: 1.75rem;
+      font-size: 0.75rem;
       color: var(--text-muted);
+      font-weight: 500;
     }
 
     @media (max-width: 480px) {
-      .login-card { padding: 1.75rem 1.25rem; }
-      .brand-name  { font-size: 1.9rem; }
+      .login-card { padding: 1.75rem 1.35rem; }
+      .brand-name  { font-size: 2rem; }
     }
   </style>
 </head>
 <body>
-  <div class="login-wrap">
+  <div class="login-wrap" id="login-container">
     <div class="brand">
       <span class="brand-icon">📦</span>
       <div class="brand-name">FlowStock</div>
       <div class="brand-tagline">Plataforma de gestión comercial</div>
     </div>
 
-    <div class="login-card">
+    <div class="login-card" id="login-card">
       <h2>Iniciá sesión para continuar</h2>
-      <div class="error-msg" id="error-msg">Usuario o contraseña incorrectos.</div>
+      <div class="error-msg" id="error-msg">
+        <span>⚠️</span>
+        <span id="error-text">Usuario o contraseña incorrectos.</span>
+      </div>
 
       <form id="login-form" autocomplete="on">
         <div class="form-group">
@@ -219,6 +252,32 @@
       if (s) window.location.href = 'index.html';
     })();
 
+    // Animación de entrada suave con Anime.js
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof anime !== 'undefined') {
+        anime.timeline({ easing: 'easeOutCubic' })
+          .add({
+            targets: '.brand',
+            translateY: [-20, 0],
+            opacity: [0, 1],
+            duration: 500
+          })
+          .add({
+            targets: '#login-card',
+            scale: [0.94, 1],
+            opacity: [0, 1],
+            duration: 450
+          }, '-=300')
+          .add({
+            targets: '.form-group, #btn-login, .login-footer',
+            translateY: [15, 0],
+            opacity: [0, 1],
+            delay: anime.stagger(60),
+            duration: 400
+          }, '-=250');
+      }
+    });
+
     const supabaseUrl = window.SUPABASE_URL || '';
     const supabaseKey = window.SUPABASE_KEY || '';
     let _sb = null;
@@ -232,6 +291,7 @@
       const password = document.getElementById('password').value;
       const btn      = document.getElementById('btn-login');
       const errEl    = document.getElementById('error-msg');
+      const errTxt   = document.getElementById('error-text');
 
       errEl.classList.remove('visible');
       btn.disabled = true;
@@ -249,8 +309,16 @@
           .single();
 
         if (error || !data) {
-          errEl.textContent = 'Usuario o contraseña incorrectos.';
+          errTxt.textContent = 'Usuario o contraseña incorrectos.';
           errEl.classList.add('visible');
+          if (typeof anime !== 'undefined') {
+            anime({
+              targets: '#login-card',
+              translateX: [-8, 8, -4, 4, 0],
+              duration: 350,
+              easing: 'easeInOutQuad'
+            });
+          }
           btn.disabled = false;
           btn.textContent = 'Ingresar';
           return;
@@ -258,13 +326,11 @@
 
         Auth.setSession({ id: data.id, username: data.username, role: data.role });
 
-        // Si es superadmin, ir directo a index
         if (data.role === 'superadmin') {
           window.location.href = 'index.html';
           return;
         }
 
-        // Si es admin, verificar si ya configuró su perfil
         const { data: profile } = await _sb
           .from('admin_profiles')
           .select('is_configured')
@@ -278,7 +344,7 @@
         }
 
       } catch (err) {
-        errEl.textContent = 'Error de conexión. Verificá tu configuración.';
+        errTxt.textContent = 'Error de conexión. Verificá tu configuración.';
         errEl.classList.add('visible');
         btn.disabled = false;
         btn.textContent = 'Ingresar';

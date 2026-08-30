@@ -228,8 +228,18 @@ const SalesModule = {
                 discountType: 'none', discountValue: 0
             });
         }
-        if (typeof Toast !== 'undefined') Toast.show(`${name} agregado al carrito`, 'info', 1500);
+        if (typeof Toast !== 'undefined') Toast.show(`${name} agregado al carrito`, 'info', 1400);
         this._renderCart();
+
+        if (typeof anime !== 'undefined') {
+            anime({
+                targets: '#sale-total',
+                scale: [1.2, 1],
+                color: ['#e5c07b', '#d4af37'],
+                duration: 350,
+                easing: 'easeOutBack'
+            });
+        }
     },
 
     updateDiscountType(idx, type) {
@@ -312,6 +322,10 @@ const SalesModule = {
           </div>
         </div>
       </div>`).join('')}</div>`;
+
+        if (typeof anime !== 'undefined') {
+            anime({ targets: '.cart-item-card', opacity: [0, 1], translateY: [10, 0], delay: anime.stagger(50), duration: 400, easing: 'easeOutQuad' });
+        }
     },
 
     async _searchClients(q) {
@@ -360,23 +374,21 @@ const SalesModule = {
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar y Seleccionar</button>
+          <button type="submit" class="btn btn-primary">Guardar Cliente</button>
         </div>
       </form>`);
     },
 
     async saveNewClientInline(e) {
         e.preventDefault();
-        const name    = document.getElementById('nc-name').value.trim();
-        const dni     = document.getElementById('nc-dni').value.trim();
-        const phone   = document.getElementById('nc-phone').value.trim();
-        const address = document.getElementById('nc-address').value.trim();
-        const email   = document.getElementById('nc-email').value.trim();
+        const f = e.target;
+        const name = f.name.value.trim();
+        const dni = f.dni.value.trim();
+        const phone = f.phone.value.trim();
+        const address = f.address.value.trim();
+        const email = f.email.value.trim();
 
-        await DB.saveClient({ name, dni, phone, address, email, balance: 0 });
-        const all = await DB.getClients();
-        const newClient = all.find(c => c.name === name);
-
+        const newClient = await DB.saveClient({ name, dni, phone, address, email });
         Modal.close();
         if (typeof Toast !== 'undefined') Toast.show(`Cliente ${name} creado con éxito`, 'success');
         if (newClient) {
@@ -403,7 +415,17 @@ const SalesModule = {
         const map = { efectivo: 'pay-efec', transferencia: 'pay-tran', cuenta_corriente: 'pay-cuen', qr: 'pay-qr__', debito: 'pay-debi', credito: 'pay-cred' };
         document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('active'));
         const btn = document.getElementById(map[type]);
-        if (btn) btn.classList.add('active');
+        if (btn) {
+            btn.classList.add('active');
+            if (typeof anime !== 'undefined') {
+                anime({
+                    targets: btn,
+                    scale: [0.95, 1],
+                    duration: 250,
+                    easing: 'easeOutBack'
+                });
+            }
+        }
     },
 
     async confirmSale() {

@@ -86,6 +86,17 @@ const App = {
     } else {
       logoEl.textContent = LOGO_EMOJIS[logoType] || '🏪';
     }
+
+    if (typeof anime !== 'undefined' && logoEl) {
+      anime({
+        targets: '#sidebar-logo-icon',
+        scale: [0.6, 1],
+        opacity: [0, 1],
+        duration: 650,
+        easing: 'easeOutElastic(1, .6)'
+      });
+    }
+
     document.getElementById('sidebar-system-name').innerHTML =
       `${systemName.toUpperCase()}<br><small style="font-size:.7rem;color:var(--accent-dim);text-transform:none;letter-spacing:.05em;">Gestión de negocio</small>`;
 
@@ -160,6 +171,9 @@ const App = {
         case 'clients':  await ClientsModule.render(content);      break;
         case 'stats':    await StatsModule.render(content);        break;
         default:         await StockModule.render(content);
+      }
+      if (typeof Utils !== 'undefined' && typeof Utils.animatePage === 'function') {
+        Utils.animatePage(content);
       }
     } catch (routeErr) {
       console.error(`Error loading page ${page}:`, routeErr);
