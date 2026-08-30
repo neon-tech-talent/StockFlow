@@ -59,6 +59,7 @@ const DB = {
   },
   async deleteProduct(id) { await this.client.from('products').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustStock(id, delta) {
+    if (!id) return null;
     const { data } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
     if (data) {
       const newStock = Math.max(0, (parseFloat(data.stock) || 0) + delta);
@@ -104,14 +105,18 @@ const DB = {
     const saleId = sData.id;
 
     const itemsToInsert = items.map(it => ({
-      sale_id: saleId, product_id: it.productId, product_name: it.productName,
+      sale_id: saleId, product_id: it.productId || null, product_name: it.productName,
       quantity: it.quantity, unit_price: it.unitPrice, 
       discount_type: it.discountType || 'none', discount_value: it.discountValue || 0,
       admin_id: this._adminId()
     }));
     await this.client.from('sale_items').insert(itemsToInsert);
 
-    for (const it of items) { await this.adjustStock(it.productId, -it.quantity); }
+    for (const it of items) { 
+      if (it.productId) {
+        await this.adjustStock(it.productId, -it.quantity); 
+      }
+    }
     if (sale.paymentType === 'efectivo') {
       await this.saveCashMovement({ amount: sale.total, type: 'venta', reason: `Venta #${saleId.slice(-4)}` });
     }
@@ -330,9 +335,12 @@ const DB = {
 
       const prodUnits = {}, prodProfit = {};
       itemsForStats.forEach(it => {
+        // Excluir servicios cargados desde turnos (no tienen product_id o no están en el catálogo de productos físicos)
         const p = prods.find(pr => pr.id === it.product_id);
-        const prodKey = it.product_id || it.product_name || '__unknown__';
-        const prodName = it.product_name || p?.name || 'Producto';
+        if (!it.product_id || !p) return;
+
+        const prodKey = it.product_id;
+        const prodName = p?.name || it.product_name || 'Producto';
         const qty = parseFloat(it.quantity) || 0;
         const unitPrice = parseFloat(it.unit_price) || 0;
         const costPrice = parseFloat(p?.cost_price) || 0;
@@ -647,11 +655,48 @@ const DB = {
   },
 
   async updateAppointmentStatus(id, status) {
-    const obj = { status, updated_at: new Date().toISOString() };
+    // Normalizar status para respetar la restricción CHECK de la base de datos ('atendido' en lugar de 'completado')
+    const dbStatus = (status === 'completado') ? 'atendido' : status;
+    const obj = { status: dbStatus, updated_at: new Date().toISOString() };
     const { data, error } = await this.client.from('turnos_appointments').update(obj).eq('id', id).eq('admin_id', this._adminId()).select().single();
     if (error) throw error;
-    await this.logTurnosAudit('CAMBIO_ESTADO_TURNO', 'turnos_appointments', id, `Estado cambiado a ${status}`);
+    await this.logTurnosAudit('CAMBIO_ESTADO_TURNO', 'turnos_appointments', id, `Estado cambiado a ${dbStatus}`);
     return data;
+  },
+
+  async completeAppointmentAndCreateSale(id, paymentType = 'efectivo') {
+    const appts = await this.getAppointments();
+    const appt = appts.find(a => a.id === id);
+    if (!appt) throw new Error("Turno no encontrado");
+
+    // 1. Actualizar estado a 'atendido'
+    const updatedAppt = await this.updateAppointmentStatus(id, 'atendido');
+
+    // 2. Registrar venta oficial si el precio es mayor a 0
+    const price = parseFloat(appt.price) || 0;
+    let saleId = null;
+    if (price > 0) {
+      const saleCart = [{
+        productId: null, // Es un servicio, no descuenta stock físico
+        productName: `${appt.service_name || 'Servicio'} (${appt.professional_name || 'Turno'})`,
+        unitPrice: price,
+        quantity: 1,
+        unit: 'Servicio',
+        discountType: 'none',
+        discountValue: 0
+      }];
+
+      saleId = await this.saveSale({
+        total: price,
+        paymentType: paymentType,
+        clientId: appt.client_id || null,
+        clientName: appt.client_name || 'Cliente Turno',
+        invoiced: false
+      }, saleCart);
+    }
+
+    await this.logTurnosAudit('COMPLETAR_TURNO', 'turnos_appointments', id, `Turno completado y venta registrada ($${price})`);
+    return { appointment: updatedAppt, saleId };
   },
 
   /* ── AUDIT LOGS & REMINDERS ── */

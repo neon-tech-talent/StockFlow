@@ -121,8 +121,9 @@ const TurnosModule = {
             <input id="filter-search" type="text" placeholder="Buscar por nombre de cliente, teléfono o servicio..." class="form-input" style="padding:0.5rem 0.85rem;" value="${Utils.escHtml(this._searchQuery)}">
           </div>
           <select id="filter-status" class="form-input" style="width:auto; min-width:170px; padding:0.5rem 0.85rem;" onchange="TurnosModule.onStatusFilterChange(this.value)">
-            <option value="activos" ${this._statusFilter === 'activos' ? 'selected' : ''}>Turnos Activos</option>
+            <option value="activos" ${this._statusFilter === 'activos' ? 'selected' : ''}>Pendientes / Activos</option>
             <option value="todos" ${this._statusFilter === 'todos' ? 'selected' : ''}>Todos los Estados</option>
+            <option value="atendido" ${this._statusFilter === 'atendido' ? 'selected' : ''}>Atendidos / Cobrados</option>
             <option value="cancelado" ${this._statusFilter === 'cancelado' ? 'selected' : ''}>Cancelados</option>
           </select>
           <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar')" style="white-space:nowrap;">
@@ -199,7 +200,9 @@ const TurnosModule = {
 
     // Filtro por Estado
     if (this._statusFilter === 'activos') {
-      appts = appts.filter(a => a.status !== 'cancelado');
+      appts = appts.filter(a => a.status !== 'cancelado' && a.status !== 'atendido' && a.status !== 'completado');
+    } else if (this._statusFilter === 'atendido') {
+      appts = appts.filter(a => a.status === 'atendido' || a.status === 'completado');
     } else if (this._statusFilter === 'cancelado') {
       appts = appts.filter(a => a.status === 'cancelado');
     }
@@ -232,7 +235,7 @@ const TurnosModule = {
 
     container.innerHTML = appts.map(a => {
       const isCancelled = a.status === 'cancelado';
-      const isCompleted = a.status === 'completado';
+      const isCompleted = a.status === 'atendido' || a.status === 'completado';
       const timeKey = (a.start_datetime || '').slice(0, 16);
       const isParallel = timeCountMap[timeKey] > 1 && !isCancelled;
 
@@ -242,7 +245,7 @@ const TurnosModule = {
 
       let statusBadge = `<span class="badge badge-success">Confirmado</span>`;
       if (isCancelled) statusBadge = `<span class="badge badge-danger">Cancelado</span>`;
-      else if (isCompleted) statusBadge = `<span class="badge badge-info">Completado</span>`;
+      else if (isCompleted) statusBadge = `<span class="badge badge-info">✅ Atendido / Cobrado</span>`;
       else if (a.status === 'reprogramado') statusBadge = `<span class="badge badge-warning">Reprogramado</span>`;
 
       const phoneClean = (a.client_phone || '').replace(/\D/g, '');
@@ -291,7 +294,7 @@ const TurnosModule = {
           <!-- Acciones del Turno -->
           <div style="margin-top:0.85rem; padding-top:0.65rem; border-top:1px solid var(--border-subtle); display:flex; justify-content:flex-end; gap:0.5rem; align-items:center; flex-wrap:wrap;">
             ${!isCancelled && !isCompleted ? `
-              <button class="btn btn-sm btn-outline" style="color:var(--green); border-color:rgba(16,185,129,0.35);" onclick="TurnosModule.completeAppointment('${a.id}')" title="Marcar como atendido/completado">
+              <button class="btn btn-sm btn-outline" style="color:var(--green); border-color:rgba(16,185,129,0.35);" onclick="TurnosModule.openCompleteAppointmentModal('${a.id}')" title="Completar turno y cobrar servicio">
                 ✅ Completar
               </button>
               <button class="btn btn-sm btn-outline" style="color:var(--red); border-color:rgba(244,63,94,0.35);" onclick="TurnosModule.cancelAppointmentPrompt('${a.id}')" title="Cancelar turno">
@@ -791,15 +794,76 @@ const TurnosModule = {
     }
   },
 
-  /* ── COMPLETAR TURNO ── */
-  async completeAppointment(apptId) {
+  /* ── COMPLETAR TURNO Y REGISTRAR VENTA ── */
+  async openCompleteAppointmentModal(apptId) {
+    const appts = await DB.getAppointments();
+    const appt = appts.find(a => a.id === apptId);
+    if (!appt) return;
+
+    const price = parseFloat(appt.price) || 0;
+
+    Modal.open(`
+      <h2 class="modal-title">✅ Completar Turno y Registrar Venta</h2>
+      <p class="text-muted" style="margin-top:-0.8rem; margin-bottom:1.25rem; font-size:0.85rem;">
+        Se marcará el turno como atendido y se creará el comprobante de venta oficial.
+      </p>
+
+      <form onsubmit="TurnosModule.confirmCompleteAppointment(event, '${appt.id}')">
+        <div class="card" style="background:var(--bg-main); padding:1.1rem; margin-bottom:1.25rem; border:1px solid var(--border-subtle);">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.95rem;">
+            <span>Cliente:</span>
+            <strong>${Utils.escHtml(appt.client_name)}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.95rem;">
+            <span>Servicio:</span>
+            <strong>${Utils.escHtml(appt.service_name)}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.95rem;">
+            <span>Responsable:</span>
+            <strong style="color:var(--accent);">${Utils.escHtml(appt.professional_name || 'No asignado')}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-top:0.6rem; padding-top:0.6rem; border-top:1px solid var(--border); font-size:1.15rem;">
+            <span style="font-weight:700;">TOTAL A COBRAR:</span>
+            <strong style="color:var(--accent); font-size:1.25rem;">${Utils.currency(price)}</strong>
+          </div>
+        </div>
+
+        ${price > 0 ? `
+          <div class="form-group" style="margin-bottom:1.25rem;">
+            <label>Medio de Pago *</label>
+            <select id="comp-payment-type" name="payment_type" class="form-input" style="font-size:0.95rem;">
+              <option value="efectivo" selected>💵 Efectivo (Suma a Caja)</option>
+              <option value="transferencia">📱 Transferencia Bancaria</option>
+              <option value="qr">🔳 MercadoPago / QR</option>
+              <option value="debito">💳 Tarjeta de Débito</option>
+              <option value="credito">💳 Tarjeta de Crédito</option>
+              <option value="cuenta_corriente">📒 Cuenta Corriente (Cliente)</option>
+            </select>
+          </div>
+        ` : ''}
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg, var(--green) 0%, #059669 100%);">
+            ✅ Registrar Venta y Completar
+          </button>
+        </div>
+      </form>`);
+  },
+
+  async confirmCompleteAppointment(e, apptId) {
+    e.preventDefault();
+    const f = e.target;
+    const paymentType = f.payment_type ? f.payment_type.value : 'efectivo';
+
     try {
-      await DB.updateAppointmentStatus(apptId, 'completado');
-      if (typeof Toast !== 'undefined') Toast.show('Turno marcado como completado', 'success');
+      await DB.completeAppointmentAndCreateSale(apptId, paymentType);
+      Modal.close();
+      if (typeof Toast !== 'undefined') Toast.show('¡Turno atendido y venta registrada exitosamente!', 'success');
       await this._renderAppointmentsList();
     } catch (err) {
       console.error("Error al completar turno:", err);
-      if (typeof Toast !== 'undefined') Toast.show('Error al actualizar estado', 'danger');
+      if (typeof Toast !== 'undefined') Toast.show(err.message || 'Error al completar turno', 'danger');
     }
   }
 };
