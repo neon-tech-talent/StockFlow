@@ -1380,6 +1380,7 @@ body.body-menu-open { overflow: hidden !important; touch-action: none; }
 /* ── RESPONSIVE RULES (TABLET & MOBILE) ── */
 @media (max-width: 992px) {
   .new-sale-layout { grid-template-columns: 1fr; }
+  .turnos-cargar-grid { grid-template-columns: 1fr !important; }
   .charts-grid { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
   .kpi-row { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
