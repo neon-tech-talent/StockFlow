@@ -107,7 +107,7 @@ const App = {
     document.getElementById('sidebar-nav').innerHTML = `
       <div class="nav-item" id="nav-stock" onclick="location.hash='#stock'"><span class="nav-icon">📦</span><span>Stock</span></div>
       <div class="nav-item" id="nav-caja" onclick="location.hash='#caja'"><span class="nav-icon">💸</span><span>Caja</span></div>
-      <div class="nav-item" id="nav-sales" onclick="location.hash='#sales'"><span class="nav-icon">📜</span><span>Ventas</span></div>
+      <div class="nav-item" id="nav-sales" onclick="location.hash='#sales'"><span class="nav-icon">📜</span><span>Historial Ventas</span></div>
       <div class="nav-item" data-page="new-sale" onclick="App.go('new-sale')"><span class="nav-icon">➕</span><span>Nueva Venta</span></div>
       ${turnosEnabled ? '<div class="nav-item" id="nav-turnos" onclick="location.hash=\'#turnos\'"><span class="nav-icon">📅</span><span>Turnos</span></div>' : ''}
       <div class="nav-item" data-page="clients" onclick="App.go('clients')"><span class="nav-icon">👥</span><span>Clientes</span></div>
@@ -123,7 +123,7 @@ const App = {
     const titles = {
       stock: 'Gestión de Stock',
       caja: 'Control de Caja',
-      sales: 'Módulo de Ventas',
+      sales: 'Historial de Ventas',
       'new-sale': 'Nueva Venta',
       turnos: 'Gestión de Turnos',
       clients: 'Clientes',
