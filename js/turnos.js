@@ -4,6 +4,7 @@ const TurnosModule = {
   _selectedProfId: '',
   _searchQuery: '',
   _statusFilter: 'activos', // 'activos' | 'todos' | 'cancelado'
+  _selectedClientId: null,
 
   async render(el, activeTab = null) {
     if (activeTab) this._activeTab = activeTab;
@@ -16,6 +17,7 @@ const TurnosModule = {
 
     const profs = await DB.getTurnosProfessionals();
     const services = await DB.getTurnosServices();
+    const clients = await DB.getClients();
 
     // Default time: Siguiente hora en punto
     const now = new Date();
@@ -49,7 +51,7 @@ const TurnosModule = {
       <!-- Contenedor Dinámico de la Pestaña Activa -->
       <div id="turnos-tab-content"></div>`;
 
-    await this._renderActiveTab(profs, services, defaultTime);
+    await this._renderActiveTab(profs, services, clients, defaultTime);
   },
 
   async switchTab(tab) {
@@ -60,21 +62,22 @@ const TurnosModule = {
     
     const profs = await DB.getTurnosProfessionals();
     const services = await DB.getTurnosServices();
+    const clients = await DB.getClients();
     const now = new Date();
     const nextHour = new Date(now.getTime() + 60 * 60 * 1000);
     const defaultTime = `${String(nextHour.getHours()).padStart(2, '0')}:00`;
 
-    await this._renderActiveTab(profs, services, defaultTime);
+    await this._renderActiveTab(profs, services, clients, defaultTime);
   },
 
-  async _renderActiveTab(profs, services, defaultTime) {
+  async _renderActiveTab(profs, services, clients, defaultTime) {
     const box = document.getElementById('turnos-tab-content');
     if (!box) return;
 
     if (this._activeTab === 'agenda') {
       await this._renderAgendaTab(box, profs);
     } else {
-      this._renderCargarTab(box, profs, services, defaultTime);
+      this._renderCargarTab(box, profs, services, clients, defaultTime);
     }
 
     if (typeof Utils !== 'undefined' && typeof Utils.animatePage === 'function') {
@@ -306,7 +309,9 @@ const TurnosModule = {
   /* ─────────────────────────────────────────────────────────────
      PESTAÑA 2: FORMULARIO DE CARGA, SERVICIOS Y RESPONSABLES
   ───────────────────────────────────────────────────────────── */
-  _renderCargarTab(box, profs, services, defaultTime) {
+  _renderCargarTab(box, profs, services, clients, defaultTime) {
+    this._selectedClientId = null;
+
     box.innerHTML = `
       <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:1.25rem; align-items:start;" class="turnos-cargar-grid">
         
@@ -314,15 +319,23 @@ const TurnosModule = {
         <div class="card" style="padding:1.75rem;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid var(--border-subtle); padding-bottom:0.75rem;">
             <h3 class="card-title" style="margin:0; font-size:1.05rem;">➕ Agendar Nuevo Turno</h3>
-            <span class="badge badge-success" style="font-size:0.72rem;">⚡ Permite Turnos Paralelos</span>
+            <span class="badge badge-success" style="font-size:0.72rem;">⚡ Detección de Turnos Paralelos</span>
           </div>
 
-          <form id="form-quick-appt" onsubmit="TurnosModule.saveQuickAppointment(event)">
+          <form id="form-quick-appt" onsubmit="TurnosModule.handleFormSubmit(event)">
             
-            <!-- Datos del Cliente -->
+            <!-- Datos del Cliente (Selector de Clientes Existentes o Escritura Libre) -->
             <div class="form-group">
-              <label>Nombre Completo del Cliente *</label>
-              <input id="qa-client-name" name="client_name" class="form-input" required placeholder="Ej: Juan Pérez" autofocus>
+              <label>Cliente *</label>
+              ${clients.length ? `
+                <div style="margin-bottom:0.45rem;">
+                  <select id="qa-client-select" class="form-input" style="font-size:0.875rem;" onchange="TurnosModule.onClientSelect(this)">
+                    <option value="">-- Seleccionar de la lista de Clientes o escribir abajo --</option>
+                    ${clients.map(c => `<option value="${c.id}" data-name="${Utils.escHtml(c.name)}" data-phone="${Utils.escHtml(c.phone || '')}">${Utils.escHtml(c.name)} ${c.phone ? `(${Utils.escHtml(c.phone)})` : ''}</option>`).join('')}
+                  </select>
+                </div>
+              ` : ''}
+              <input id="qa-client-name" name="client_name" class="form-input" required placeholder="Nombre completo del cliente" autofocus oninput="TurnosModule.onClientTyped()">
             </div>
 
             <div class="form-group">
@@ -421,8 +434,26 @@ const TurnosModule = {
       </div>`;
   },
 
-  /* ── GUARDAR NUEVO TURNO RÁPIDO (PERMITE PARALELOS) ── */
-  async saveQuickAppointment(e) {
+  onClientSelect(sel) {
+    if (!sel || !sel.value) return;
+    const opt = sel.selectedOptions[0];
+    const nameInput = document.getElementById('qa-client-name');
+    const phoneInput = document.getElementById('qa-client-phone');
+    if (nameInput) nameInput.value = opt.dataset.name || '';
+    if (phoneInput) phoneInput.value = opt.dataset.phone || '';
+    this._selectedClientId = sel.value;
+  },
+
+  onClientTyped() {
+    const sel = document.getElementById('qa-client-select');
+    if (sel && sel.value) {
+      sel.value = '';
+      this._selectedClientId = null;
+    }
+  },
+
+  /* ── ENVÍO DE FORMULARIO CON DETECCIÓN DE TURNO PARALELO ── */
+  async handleFormSubmit(e) {
     e.preventDefault();
     const f = e.target;
 
@@ -450,27 +481,104 @@ const TurnosModule = {
 
     const endIso = new Date(new Date(startIso).getTime() + duration * 60000).toISOString();
 
-    try {
-      await DB.saveAppointment({
-        client_name: clientName,
-        client_phone: clientPhone,
-        service_id: serviceSelect.value,
-        service_name: serviceName,
-        professional_id: profSelect.value,
-        professional_name: profName,
-        start_datetime: startIso,
-        end_datetime: endIso,
-        duration_minutes: duration,
-        price: price,
-        status: 'confirmado',
-        notes: notes
-      });
+    const apptPayload = {
+      client_id: this._selectedClientId || null,
+      client_name: clientName,
+      client_phone: clientPhone,
+      service_id: serviceSelect.value,
+      service_name: serviceName,
+      professional_id: profSelect.value,
+      professional_name: profName,
+      start_datetime: startIso,
+      end_datetime: endIso,
+      duration_minutes: duration,
+      price: price,
+      status: 'confirmado',
+      notes: notes
+    };
 
-      if (typeof Toast !== 'undefined') Toast.show(`¡Turno agendado para ${clientName} a las ${apptTime} hs!`, 'success');
-      
+    // Verificar si ya existe un turno en este mismo horario
+    const allAppts = await DB.getAppointments();
+    const existingMatches = allAppts.filter(a => 
+      a.status !== 'cancelado' && 
+      (a.start_datetime || '').slice(0, 16) === `${apptDate}T${apptTime}`
+    );
+
+    if (existingMatches.length > 0) {
+      // Prompt modal para confirmar si desea agendar turno paralelo
+      this._promptParallelAppointment(apptPayload, existingMatches, apptDate, apptTime);
+    } else {
+      // No hay turno previo, guardar directo
+      await this.executeSaveAppointment(apptPayload, apptDate, apptTime);
+    }
+  },
+
+  _promptParallelAppointment(payload, existingMatches, apptDate, apptTime) {
+    const formattedDate = new Date(`${apptDate}T00:00:00`).toLocaleDateString('es-AR', {
+      weekday: 'long', day: '2-digit', month: '2-digit'
+    });
+
+    Modal.open(`
+      <div style="text-align:left;">
+        <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.75rem;">
+          <span style="font-size:1.6rem;">⚠️</span>
+          <h2 class="modal-title" style="margin:0; color:var(--accent);">Horario Ocupado — ¿Turno en Paralelo?</h2>
+        </div>
+
+        <p style="font-size:0.95rem; color:var(--text-main); margin-bottom:1rem;">
+          Ya existe un turno agendado para el <strong>${formattedDate} a las ${apptTime} hs</strong>:
+        </p>
+
+        <div style="background:var(--bg-main); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.85rem 1rem; margin-bottom:1.25rem; display:flex; flex-direction:column; gap:0.5rem;">
+          ${existingMatches.map(em => `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px dashed var(--border-subtle); padding-bottom:0.35rem;">
+              <div>
+                <strong style="color:var(--text-main);">${Utils.escHtml(em.client_name)}</strong>
+                <small class="text-muted" style="display:block;">💼 ${Utils.escHtml(em.service_name || 'Servicio')}</small>
+              </div>
+              <div style="text-align:right;">
+                <span class="badge" style="background:rgba(212,175,55,0.15); color:var(--accent); font-size:0.75rem;">
+                  👤 ${Utils.escHtml(em.professional_name || 'Sin responsable')}
+                </span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <p style="font-size:0.9rem; color:var(--text-secondary); margin-bottom:1.5rem;">
+          ¿Deseas agendar a <strong>${Utils.escHtml(payload.client_name)}</strong> como <strong>Turno en Paralelo</strong> en este mismo horario?
+        </p>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">❌ No, cambiar horario</button>
+          <button type="button" class="btn btn-primary" onclick="TurnosModule.executeSaveAppointmentFromModal('${encodeURIComponent(JSON.stringify(payload))}', '${apptDate}', '${apptTime}')">
+            ⚡ Sí, agendar en paralelo
+          </button>
+        </div>
+      </div>`);
+  },
+
+  async executeSaveAppointmentFromModal(encodedPayload, apptDate, apptTime) {
+    try {
+      const payload = JSON.parse(decodeURIComponent(encodedPayload));
+      Modal.close();
+      await this.executeSaveAppointment(payload, apptDate, apptTime);
+    } catch (err) {
+      console.error("Error al procesar payload:", err);
+    }
+  },
+
+  async executeSaveAppointment(payload, apptDate, apptTime) {
+    try {
+      await DB.saveAppointment(payload);
+
+      if (typeof Toast !== 'undefined') {
+        Toast.show(`¡Turno agendado con éxito para ${payload.client_name} a las ${apptTime} hs!`, 'success');
+      }
+
       // Actualizar fecha seleccionada para ver el turno en la agenda
       this._selectedDate = apptDate;
-      
+
       // Redirigir a la pestaña de Agenda
       await this.switchTab('agenda');
     } catch (err) {
