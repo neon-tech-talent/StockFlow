@@ -662,35 +662,61 @@ textarea.form-input { resize: vertical; min-height: 80px; }
   display: none; 
   position: fixed; 
   inset: 0;
-  background: rgba(0,0,0,0.78);
+  background: rgba(0, 0, 0, 0.82);
   z-index: 1000;
-  align-items: center; 
-  justify-content: center;
-  padding: 2rem 1rem; 
+  padding: 1.5rem 1rem;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
 
-#modal-overlay.active { display: flex; }
+#modal-overlay.active { 
+  display: flex; 
+  flex-direction: column;
+  align-items: center; 
+  justify-content: flex-start;
+}
 
 .modal-box {
   background: var(--bg-card);
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-lg);
-  padding: 2.25rem;
+  padding: 2rem 2.25rem;
   width: 100%; 
-  max-width: 580px;
+  max-width: 620px;
+  max-height: calc(100vh - 3.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: auto 0;
   position: relative;
-  box-shadow: 0 24px 70px rgba(0,0,0,0.75), var(--inner-highlight);
+  box-shadow: 0 24px 70px rgba(0,0,0,0.85), var(--inner-highlight);
+  box-sizing: border-box;
+}
+
+/* Scrollbar estilizado para el modal */
+.modal-box::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-box::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+.modal-box::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 4px;
+}
+.modal-box::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 .modal-title { 
   font-family: 'Playfair Display', serif; 
-  font-size: 1.4rem; 
+  font-size: 1.35rem; 
   color: var(--accent); 
-  margin-bottom: 1.35rem; 
+  margin-bottom: 1.25rem; 
   font-weight: 700;
+  padding-right: 2rem; /* Espacio para que no se superponga con el botón de cerrar */
 }
 
 .modal-close-corner {
@@ -709,6 +735,7 @@ textarea.form-input { resize: vertical; min-height: 80px; }
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  z-index: 10;
 }
 
 .modal-close-corner:hover { 
@@ -1590,15 +1617,17 @@ body.body-menu-open { overflow: hidden !important; touch-action: none; }
   .kpi-value { font-size: 1.3rem; }
 
   #modal-overlay {
-    padding: env(safe-area-inset-top) 0.5rem max(1rem, env(safe-area-inset-bottom));
-    align-items: flex-end;
+    padding: max(1rem, env(safe-area-inset-top)) 0.6rem max(1rem, env(safe-area-inset-bottom));
+    align-items: center;
+    justify-content: flex-start;
   }
   .modal-box {
     padding: 1.5rem 1.25rem;
-    border-radius: 20px 20px 12px 12px;
+    border-radius: var(--radius);
     width: 100%;
-    max-height: 88vh;
+    max-height: calc(100vh - 2rem);
     overflow-y: auto;
+    margin: auto 0;
   }
 }
 
