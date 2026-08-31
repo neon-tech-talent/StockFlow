@@ -286,6 +286,7 @@ const EncargosModule = {
         this._selectedClientName = null;
 
         const allProducts = await DB.getProducts();
+        const clients = await DB.getClients();
         let existingOrder = null;
 
         if (orderId) {
@@ -313,11 +314,32 @@ const EncargosModule = {
         
         <!-- Sección 1: Cliente -->
         <div class="card" style="margin-bottom:1.1rem; padding:1.1rem;">
-          <h4 class="card-title" style="margin-bottom:0.75rem;">👤 Datos del Cliente</h4>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+            <h4 class="card-title" style="margin:0;">👤 Datos del Cliente</h4>
+            <span class="text-muted" style="font-size:0.75rem;">Selecciona uno existente o escribe uno nuevo</span>
+          </div>
+
+          ${clients.length ? `
+            <div class="form-group" style="margin-bottom:0.75rem;">
+              <label style="font-size:0.8rem; font-weight:700;">Buscar / Seleccionar Cliente Existente</label>
+              <select id="no-client-select" class="form-input" style="font-size:0.9rem;" onchange="EncargosModule.onClientSelect(this)">
+                <option value="">-- Seleccionar de la lista de Clientes o escribir abajo --</option>
+                ${clients.map(c => `
+                  <option value="${c.id}" 
+                          data-name="${Utils.escHtml(c.name)}" 
+                          data-phone="${Utils.escHtml(c.phone || '')}" 
+                          data-notes="${Utils.escHtml(c.notes || '')}"
+                          ${existingOrder?.client_id === c.id ? 'selected' : ''}>
+                    ${Utils.escHtml(c.name)} ${c.phone ? `(${Utils.escHtml(c.phone)})` : ''}
+                  </option>`).join('')}
+              </select>
+            </div>
+          ` : ''}
+
           <div class="form-row">
             <div class="form-group" style="margin:0;">
               <label>Nombre del Cliente *</label>
-              <input id="no-client-name" name="client_name" class="form-input" required value="${Utils.escHtml(existingOrder?.client_name || '')}" placeholder="Nombre completo">
+              <input id="no-client-name" name="client_name" class="form-input" required value="${Utils.escHtml(existingOrder?.client_name || '')}" placeholder="Nombre completo" oninput="EncargosModule.onClientTyped()">
             </div>
             <div class="form-group" style="margin:0;">
               <label>Teléfono / WhatsApp</label>
@@ -508,6 +530,7 @@ const EncargosModule = {
         try {
             await DB.saveCustomOrder({
                 id: orderId || null,
+                clientId: this._selectedClientId || null,
                 clientName,
                 clientPhone,
                 clientAddress,
@@ -525,6 +548,30 @@ const EncargosModule = {
         } catch (err) {
             console.error("Error al guardar encargo:", err);
             if (typeof Toast !== 'undefined') Toast.show('Error al guardar el encargo', 'danger');
+        }
+    },
+
+    onClientSelect(sel) {
+        if (!sel || !sel.value) return;
+        const opt = sel.selectedOptions[0];
+        const nameInput = document.getElementById('no-client-name');
+        const phoneInput = document.getElementById('no-client-phone');
+        const addressInput = document.getElementById('no-client-address');
+        if (nameInput) nameInput.value = opt.dataset.name || '';
+        if (phoneInput) phoneInput.value = opt.dataset.phone || '';
+        if (addressInput && opt.dataset.notes && !addressInput.value) {
+            addressInput.value = opt.dataset.notes;
+        }
+        this._selectedClientId = sel.value;
+        this._selectedClientName = opt.dataset.name;
+    },
+
+    onClientTyped() {
+        const sel = document.getElementById('no-client-select');
+        if (sel && sel.value) {
+            sel.value = '';
+            this._selectedClientId = null;
+            this._selectedClientName = null;
         }
     },
 
