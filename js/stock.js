@@ -318,32 +318,100 @@ const StockModule = {
     },
 
     async openCatModal() {
-        Modal.open(`<h2 class="modal-title">Categorías de Productos</h2><form onsubmit="StockModule.saveCat(event)" style="display:flex;gap:.5rem;margin-bottom:1rem">
-        <input type="hidden" id="cat-id"><input id="cat-name" class="form-input" placeholder="Nombre de categoría..." required style="flex:1"><button class="btn btn-primary" type="submit">Guardar</button></form><div id="cat-list"></div>`);
+        Modal.open(`
+      <h2 class="modal-title">Gestión de Categorías</h2>
+      <div style="margin-bottom:1rem; padding:0.75rem 1rem; background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); border-radius:var(--radius-sm);">
+        <p class="text-muted" style="font-size:0.8rem; margin:0;">
+          ℹ️ Las categorías pueden editarse en cualquier momento para actualizar su nombre. No pueden eliminarse para preservar la integridad del catálogo y del historial.
+        </p>
+      </div>
+      <form id="form-category" onsubmit="StockModule.saveCat(event)" style="display:flex; gap:0.5rem; margin-bottom:1.25rem; align-items:center;">
+        <input type="hidden" id="cat-id" value="">
+        <input id="cat-name" class="form-input" placeholder="Nombre de categoría..." required style="flex:1;">
+        <button id="cat-btn-cancel" type="button" class="btn btn-outline" style="display:none;" onclick="StockModule.cancelEditCat()">Cancelar</button>
+        <button id="cat-btn-save" class="btn btn-primary" type="submit">➕ Agregar</button>
+      </form>
+      <div id="cat-list"></div>
+      <div class="modal-actions" style="margin-top:1.25rem;">
+        <button type="button" class="btn btn-outline" onclick="Modal.close()">Cerrar</button>
+      </div>`);
         await this._renderCatList();
     },
 
     async _renderCatList() {
-        const cats = await DB.getCategories(); const el = document.getElementById('cat-list'); if (!el) return;
-        if (!cats.length) { el.innerHTML = '<p class="text-muted" style="font-size:0.85rem">No hay categorías cargadas.</p>'; return; }
-        el.innerHTML = `<div class="table-scroll"><table class="data-table"><tbody>${cats.map(c => `<tr><td><strong>${Utils.escHtml(c.name)}</strong></td><td><button class="btn-icon danger" aria-label="Eliminar ${Utils.escHtml(c.name)}" onclick="StockModule.delCat('${c.id}')">🗑️</button></td></tr>`).join('')}</tbody></table></div>`;
+        const cats = await DB.getCategories();
+        const el = document.getElementById('cat-list');
+        if (!el) return;
+        if (!cats.length) {
+            el.innerHTML = '<p class="text-muted" style="font-size:0.85rem; text-align:center; padding:1rem 0;">No hay categorías cargadas.</p>';
+            return;
+        }
+        el.innerHTML = `
+          <div class="table-scroll" style="max-height:260px; overflow-y:auto; border:1px solid var(--border-subtle); border-radius:var(--radius-sm);">
+            <table class="data-table" style="margin:0;">
+              <thead>
+                <tr>
+                  <th style="padding:0.6rem 0.8rem;">Nombre de Categoría</th>
+                  <th style="width:90px; text-align:center; padding:0.6rem 0.8rem;">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cats.map(c => `
+                  <tr>
+                    <td style="padding:0.6rem 0.8rem;">
+                      <strong style="color:var(--text-main);">${Utils.escHtml(c.name)}</strong>
+                    </td>
+                    <td style="text-align:center; padding:0.6rem 0.8rem;">
+                      <button class="btn-icon" title="Editar nombre de categoría" aria-label="Editar ${Utils.escHtml(c.name)}" onclick="StockModule.editCat('${c.id}', '${Utils.escHtml(c.name)}')">✏️</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+    },
+
+    editCat(id, name) {
+        const idInput = document.getElementById('cat-id');
+        const nameInput = document.getElementById('cat-name');
+        const saveBtn = document.getElementById('cat-btn-save');
+        const cancelBtn = document.getElementById('cat-btn-cancel');
+
+        if (idInput) idInput.value = id;
+        if (nameInput) {
+            nameInput.value = name;
+            nameInput.focus();
+            nameInput.select();
+        }
+        if (saveBtn) saveBtn.textContent = '💾 Guardar';
+        if (cancelBtn) cancelBtn.style.display = 'inline-block';
+    },
+
+    cancelEditCat() {
+        const idInput = document.getElementById('cat-id');
+        const nameInput = document.getElementById('cat-name');
+        const saveBtn = document.getElementById('cat-btn-save');
+        const cancelBtn = document.getElementById('cat-btn-cancel');
+
+        if (idInput) idInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (saveBtn) saveBtn.textContent = '➕ Agregar';
+        if (cancelBtn) cancelBtn.style.display = 'none';
     },
 
     async saveCat(e) {
-        e.preventDefault(); const name = document.getElementById('cat-name').value.trim();
-        await DB.saveCategory({ name });
-        if (typeof Toast !== 'undefined') Toast.show('Categoría guardada', 'success');
-        await this._renderCatList();
-        document.getElementById('cat-name').value='';
-    },
+        e.preventDefault();
+        const id = document.getElementById('cat-id')?.value || '';
+        const name = document.getElementById('cat-name')?.value.trim();
+        if (!name) return;
 
-    async delCat(id) {
-        if (await DB.deleteCategory(id)) {
-            if (typeof Toast !== 'undefined') Toast.show('Categoría eliminada', 'info');
-            await this._renderCatList();
-        } else {
-            if (typeof Toast !== 'undefined') Toast.show('Tiene productos asociados', 'warning');
-            else alert('Tiene productos asociados');
+        await DB.saveCategory({ id: id || undefined, name });
+        if (typeof Toast !== 'undefined') {
+            Toast.show(id ? 'Categoría actualizada con éxito' : 'Categoría agregada con éxito', 'success');
         }
+
+        this.cancelEditCat();
+        await this._renderCatList();
+        await this._fillCatSelect('sp-cat');
+        await this._renderTable();
     }
 };

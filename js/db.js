@@ -29,10 +29,8 @@ const DB = {
     else await this.client.from('categories').insert({ name: cat.name, admin_id: this._adminId() });
   },
   async deleteCategory(id) {
-    const { count } = await this.client.from('products').select('*', { count: 'exact', head: true }).eq('category_id', id).eq('admin_id', this._adminId());
-    if (count > 0) return false;
-    await this.client.from('categories').delete().eq('id', id).eq('admin_id', this._adminId());
-    return true;
+    // Por regla de negocio, las categorías no pueden eliminarse
+    return false;
   },
 
   /* ── PRODUCTS ── */
