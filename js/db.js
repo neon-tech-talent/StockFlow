@@ -62,7 +62,7 @@ const DB = {
     if (!id) return null;
     const { data } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
     if (data) {
-      const newStock = Math.max(0, (parseFloat(data.stock) || 0) + delta);
+      const newStock = Math.max(0, Math.round(((parseFloat(data.stock) || 0) + parseFloat(delta)) * 1000) / 1000);
       const { data: updated } = await this.client.from('products').update({ stock: newStock }).eq('id', id).eq('admin_id', this._adminId()).select().single();
       return updated;
     }
@@ -106,15 +106,15 @@ const DB = {
 
     const itemsToInsert = items.map(it => ({
       sale_id: saleId, product_id: it.productId || null, product_name: it.productName,
-      quantity: it.quantity, unit_price: it.unitPrice, 
-      discount_type: it.discountType || 'none', discount_value: it.discountValue || 0,
+      quantity: parseFloat(it.quantity) || 0, unit_price: parseFloat(it.unitPrice) || 0, 
+      discount_type: it.discountType || 'none', discount_value: parseFloat(it.discountValue) || 0,
       admin_id: this._adminId()
     }));
     await this.client.from('sale_items').insert(itemsToInsert);
 
     for (const it of items) { 
       if (it.productId) {
-        await this.adjustStock(it.productId, -it.quantity); 
+        await this.adjustStock(it.productId, -(parseFloat(it.quantity) || 0)); 
       }
     }
     if (sale.paymentType === 'efectivo') {
@@ -131,7 +131,11 @@ const DB = {
     if (!sale || sale.voided) return false;
 
     const items = await this.getSaleItems(saleId);
-    for (const it of items) { if (it.product_id) await this.adjustStock(it.product_id, it.quantity); }
+    for (const it of items) { 
+      if (it.product_id) {
+        await this.adjustStock(it.product_id, parseFloat(it.quantity) || 0); 
+      }
+    }
 
     await this.client.from('sales').update({ voided: true }).eq('id', saleId).eq('admin_id', this._adminId());
 
@@ -167,14 +171,17 @@ const DB = {
     return data || [];
   },
   async saveSupply(s) {
-    const obj = { name: s.name, stock: s.stock, unit: s.unit };
+    const obj = { name: s.name, stock: parseFloat(s.stock) || 0, unit: s.unit };
     if (s.id) await this.client.from('supplies').update(obj).eq('id', s.id).eq('admin_id', this._adminId());
     else await this.client.from('supplies').insert({ ...obj, admin_id: this._adminId() });
   },
   async deleteSupply(id) { await this.client.from('supplies').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustSupplyStock(id, delta) {
     const { data } = await this.client.from('supplies').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
-    if (data) await this.client.from('supplies').update({ stock: (data.stock || 0) + delta }).eq('id', id).eq('admin_id', this._adminId());
+    if (data) {
+      const newStock = Math.max(0, Math.round(((parseFloat(data.stock) || 0) + parseFloat(delta)) * 1000) / 1000);
+      await this.client.from('supplies').update({ stock: newStock }).eq('id', id).eq('admin_id', this._adminId());
+    }
   },
   async getDeductions() {
     const { data } = await this.client.from('supply_deductions').select('*').eq('admin_id', this._adminId()).order('created_at', { ascending: false });

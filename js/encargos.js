@@ -338,7 +338,7 @@ const EncargosModule = {
               <option value="">-- Seleccionar Producto del Inventario --</option>
               ${allProducts.map(p => `<option value="${p.id}" data-name="${Utils.escHtml(p.name)}" data-price="${p.sell_price}">${Utils.escHtml(p.name)} (${Utils.currency(p.sell_price)})</option>`).join('')}
             </select>
-            <input id="no-prod-qty" type="number" step="1" min="1" value="1" class="form-input" style="flex:1; max-width:80px;" placeholder="Cant.">
+            <input id="no-prod-qty" type="number" step="any" min="0.001" value="1" class="form-input" style="flex:1; max-width:85px;" placeholder="Cant.">
             <button type="button" class="btn btn-outline" onclick="EncargosModule.addItemToCart()">➕ Agregar</button>
           </div>
           <div id="no-cart-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:160px; overflow-y:auto;"></div>

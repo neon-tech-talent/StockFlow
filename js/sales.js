@@ -234,25 +234,33 @@ const SalesModule = {
 
     async addToCart(id, name, price) {
         const prod = (await DB.getProducts()).find(p => p.id === id);
-        const stock = prod ? prod.stock : 0;
+        const stock = parseFloat(prod ? prod.stock : 0) || 0;
+        const unit = prod?.unit || 'Unidades';
         const exist = this.cart.find(x => x.productId === id);
+
+        // Determinación de cantidad de incremento según la unidad
+        let delta = 1;
+        if (unit === 'Litros') delta = stock < 1 ? Math.min(0.5, stock) : 1;
+        else if (unit === 'Gramos') delta = stock < 100 ? (stock > 0 ? stock : 1) : 100;
         
         if (exist) {
-            if (exist.quantity + 1 > stock) {
-                if (typeof Toast !== 'undefined') Toast.show(`No hay stock suficiente de ${name}. Quedan: ${stock}`, 'warning');
-                else alert(`No hay stock suficiente de ${name}. Stock disponible: ${stock}`);
+            const nextQty = Math.round((exist.quantity + delta) * 1000) / 1000;
+            if (nextQty > stock) {
+                if (typeof Toast !== 'undefined') Toast.show(`No hay stock suficiente de ${name}. Quedan: ${stock} ${unit}`, 'warning');
+                else alert(`No hay stock suficiente de ${name}. Stock disponible: ${stock} ${unit}`);
                 return;
             }
-            exist.quantity++;
+            exist.quantity = nextQty;
         } else {
-            if (stock < 1) {
+            if (stock <= 0) {
                 if (typeof Toast !== 'undefined') Toast.show(`No hay stock disponible de ${name}`, 'warning');
                 else alert(`No hay stock disponible de ${name}`);
                 return;
             }
+            const initialQty = Math.min(delta, stock);
             this.cart.push({ 
-                productId: id, productName: name, unitPrice: price, quantity: 1, 
-                maxStock: stock, unit: prod?.unit || 'Unidades',
+                productId: id, productName: name, unitPrice: price, quantity: initialQty, 
+                maxStock: stock, unit: unit,
                 discountType: 'none', discountValue: 0
             });
         }
@@ -290,16 +298,20 @@ const SalesModule = {
     removeFromCart(idx) { this.cart.splice(idx, 1); this._renderCart(); },
 
     updateQty(idx, val) {
-        const q = parseInt(val);
+        const q = parseFloat(val);
         const item = this.cart[idx];
-        if (q > item.maxStock) {
-            if (typeof Toast !== 'undefined') Toast.show(`Stock insuficiente. Quedan ${item.maxStock}`, 'warning');
-            else alert(`Stock insuficiente. Solo quedan ${item.maxStock} unidades.`);
+        if (isNaN(q) || q <= 0) {
+            this.cart.splice(idx, 1);
             this._renderCart();
             return;
         }
-        if (q > 0) item.quantity = q;
-        else this.cart.splice(idx, 1);
+        if (q > item.maxStock) {
+            if (typeof Toast !== 'undefined') Toast.show(`Stock insuficiente de ${item.productName}. Quedan ${item.maxStock} ${item.unit}`, 'warning');
+            else alert(`Stock insuficiente. Solo quedan ${item.maxStock} ${item.unit}.`);
+            this._renderCart();
+            return;
+        }
+        item.quantity = Math.round(q * 1000) / 1000;
         this._renderCart();
     },
 
@@ -314,14 +326,17 @@ const SalesModule = {
             } else if (it.discountType === 'amount') {
                 subtotal -= (it.discountValue || 0);
             }
-            it._computedSubtotal = Math.max(0, subtotal);
+            it._computedSubtotal = Math.max(0, Math.round(subtotal * 100) / 100);
             total += it._computedSubtotal;
         });
 
         const totalEl = document.getElementById('sale-total');
         if (totalEl) totalEl.textContent = Utils.currency(total);
         if (!this.cart.length) { el.innerHTML = Utils.emptyState('🛒', 'El carrito está vacío', 'Haz clic en un producto para agregarlo'); return; }
-        el.innerHTML = `<div class="cart-list">${this.cart.map((it, i) => `
+        el.innerHTML = `<div class="cart-list">${this.cart.map((it, i) => {
+            const step = (it.unit === 'Litros') ? 0.5 : (it.unit === 'Gramos') ? 100 : 1;
+            const unitAbbr = (it.unit === 'Litros') ? 'L' : (it.unit === 'Gramos') ? 'gr' : 'u.';
+            return `
       <div class="cart-item-card">
         <div class="cart-item-header">
           <strong class="cart-item-name">${Utils.escHtml(it.productName)}</strong>
@@ -343,13 +358,20 @@ const SalesModule = {
             </select>
             ${it.discountType !== 'none' ? `<input type="number" class="form-input" style="padding: 0.25rem; font-size: 0.8rem; width: 65px;" placeholder="${it.discountType === 'percentage' ? '%' : '$'}" value="${it.discountValue || ''}" onchange="SalesModule.updateDiscountValue(${i}, this.value)" min="0">` : ''}
           </div>
-          <div class="qty-stepper">
-            <button type="button" class="btn-qty" aria-label="Disminuir cantidad" onclick="SalesModule.updateQty(${i}, ${it.quantity - 1})">-</button>
-            <input type="number" class="qty-input" value="${it.quantity}" min="1" onchange="SalesModule.updateQty(${i}, this.value)">
-            <button type="button" class="btn-qty" aria-label="Aumentar cantidad" onclick="SalesModule.updateQty(${i}, ${it.quantity + 1})">+</button>
+          <div class="qty-stepper" style="display:flex; align-items:center; gap:0.25rem;">
+            <button type="button" class="btn-qty" aria-label="Disminuir cantidad" onclick="SalesModule.updateQty(${i}, ${Math.max(0, Math.round((it.quantity - step) * 1000) / 1000)})">-</button>
+            <input type="number" class="qty-input" value="${it.quantity}" step="any" min="0.001" onchange="SalesModule.updateQty(${i}, this.value)" style="width:75px; text-align:center;">
+            <button type="button" class="btn-qty" aria-label="Aumentar cantidad" onclick="SalesModule.updateQty(${i}, ${Math.round((it.quantity + step) * 1000) / 1000})">+</button>
+            <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted); min-width:18px;">${unitAbbr}</span>
           </div>
         </div>
-      </div>`).join('')}</div>`;
+      </div>`;
+        }).join('')}</div>`;
+
+        if (typeof anime !== 'undefined') {
+            anime({ targets: '.cart-item-card', opacity: [0, 1], translateY: [10, 0], delay: anime.stagger(50), duration: 400, easing: 'easeOutQuad' });
+        }
+    },
 
         if (typeof anime !== 'undefined') {
             anime({ targets: '.cart-item-card', opacity: [0, 1], translateY: [10, 0], delay: anime.stagger(50), duration: 400, easing: 'easeOutQuad' });
