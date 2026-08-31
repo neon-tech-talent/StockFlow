@@ -74,8 +74,13 @@ const DB = {
   },
   async saveClient(c) {
     const obj = { name: c.name, phone: c.phone, email: c.email, balance: c.balance || 0, dni: c.dni || null, address: c.address || null };
-    if (c.id) await this.client.from('clients').update(obj).eq('id', c.id).eq('admin_id', this._adminId());
-    else await this.client.from('clients').insert({ ...obj, admin_id: this._adminId() });
+    if (c.id) {
+      const { data } = await this.client.from('clients').update(obj).eq('id', c.id).eq('admin_id', this._adminId()).select().single();
+      return data;
+    } else {
+      const { data } = await this.client.from('clients').insert({ ...obj, admin_id: this._adminId() }).select().single();
+      return data;
+    }
   },
   async updateBalance(id, delta) {
     const { data } = await this.client.from('clients').select('balance').eq('id', id).eq('admin_id', this._adminId()).single();

@@ -316,25 +316,24 @@ const EncargosModule = {
         <div class="card" style="margin-bottom:1.1rem; padding:1.1rem;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
             <h4 class="card-title" style="margin:0;">👤 Datos del Cliente</h4>
-            <span class="text-muted" style="font-size:0.75rem;">Selecciona uno existente o escribe uno nuevo</span>
+            <button type="button" class="btn btn-sm btn-outline" onclick="EncargosModule.prepareNewClientFields()" style="font-size:0.75rem; padding:0.2rem 0.55rem; color:var(--accent); border-color:var(--accent);">➕ + Cargar Nuevo Cliente</button>
           </div>
 
-          ${clients.length ? `
-            <div class="form-group" style="margin-bottom:0.75rem;">
-              <label style="font-size:0.8rem; font-weight:700;">Buscar / Seleccionar Cliente Existente</label>
-              <select id="no-client-select" class="form-input" style="font-size:0.9rem;" onchange="EncargosModule.onClientSelect(this)">
-                <option value="">-- Seleccionar de la lista de Clientes o escribir abajo --</option>
-                ${clients.map(c => `
-                  <option value="${c.id}" 
-                          data-name="${Utils.escHtml(c.name)}" 
-                          data-phone="${Utils.escHtml(c.phone || '')}" 
-                          data-notes="${Utils.escHtml(c.notes || '')}"
-                          ${existingOrder?.client_id === c.id ? 'selected' : ''}>
-                    ${Utils.escHtml(c.name)} ${c.phone ? `(${Utils.escHtml(c.phone)})` : ''}
-                  </option>`).join('')}
-              </select>
-            </div>
-          ` : ''}
+          <div class="form-group" style="margin-bottom:0.75rem;">
+            <label style="font-size:0.8rem; font-weight:700;">Buscar / Seleccionar Cliente Existente</label>
+            <select id="no-client-select" class="form-input" style="font-size:0.9rem;" onchange="EncargosModule.onClientSelect(this)">
+              <option value="">-- Seleccionar de la lista de Clientes o completar abajo --</option>
+              <option value="__new__" style="color:var(--accent); font-weight:700;">➕ + Cargar Nuevo Cliente (Escribir datos abajo)</option>
+              ${clients.map(c => `
+                <option value="${c.id}" 
+                        data-name="${Utils.escHtml(c.name)}" 
+                        data-phone="${Utils.escHtml(c.phone || '')}" 
+                        data-notes="${Utils.escHtml(c.notes || '')}"
+                        ${existingOrder?.client_id === c.id ? 'selected' : ''}>
+                  ${Utils.escHtml(c.name)} ${c.phone ? `(${Utils.escHtml(c.phone)})` : ''}
+                </option>`).join('')}
+            </select>
+          </div>
 
           <div class="form-row">
             <div class="form-group" style="margin:0;">
@@ -346,9 +345,13 @@ const EncargosModule = {
               <input id="no-client-phone" name="client_phone" class="form-input" value="${Utils.escHtml(existingOrder?.client_phone || '')}" placeholder="Ej: 11 2345-6789">
             </div>
           </div>
-          <div class="form-group" style="margin-top:0.75rem; margin-bottom:0;">
+          <div class="form-group" style="margin-top:0.75rem; margin-bottom:0.5rem;">
             <label>Dirección de Entrega (Opcional si es retiro)</label>
             <input id="no-client-address" name="client_address" class="form-input" value="${Utils.escHtml(existingOrder?.client_address || '')}" placeholder="Ej: Av. San Martín 1234, Dpto 2B">
+          </div>
+          <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.78rem; color:var(--text-muted); padding-top:0.25rem;">
+            <span>💡</span>
+            <span>Si ingresas un cliente nuevo, se registrará automáticamente en tu base de datos de Clientes.</span>
           </div>
         </div>
 
@@ -528,9 +531,31 @@ const EncargosModule = {
         const notes = f.notes.value.trim();
 
         try {
+            let finalClientId = this._selectedClientId || null;
+
+            // Si es un cliente nuevo escrito a mano, guardarlo automáticamente en la tabla de clientes
+            if (!finalClientId && clientName) {
+                try {
+                    const existingClients = await DB.getClients();
+                    const matched = existingClients.find(c => c.name.trim().toLowerCase() === clientName.toLowerCase());
+                    if (matched) {
+                        finalClientId = matched.id;
+                    } else {
+                        const newClient = await DB.saveClient({
+                            name: clientName,
+                            phone: clientPhone,
+                            address: clientAddress
+                        });
+                        if (newClient?.id) finalClientId = newClient.id;
+                    }
+                } catch (errClient) {
+                    console.warn("No se pudo registrar automáticamente en la tabla clients:", errClient);
+                }
+            }
+
             await DB.saveCustomOrder({
                 id: orderId || null,
-                clientId: this._selectedClientId || null,
+                clientId: finalClientId,
                 clientName,
                 clientPhone,
                 clientAddress,
@@ -552,7 +577,16 @@ const EncargosModule = {
     },
 
     onClientSelect(sel) {
-        if (!sel || !sel.value) return;
+        if (!sel) return;
+        if (sel.value === '__new__') {
+            this.prepareNewClientFields();
+            return;
+        }
+        if (!sel.value) {
+            this._selectedClientId = null;
+            this._selectedClientName = null;
+            return;
+        }
         const opt = sel.selectedOptions[0];
         const nameInput = document.getElementById('no-client-name');
         const phoneInput = document.getElementById('no-client-phone');
@@ -566,9 +600,26 @@ const EncargosModule = {
         this._selectedClientName = opt.dataset.name;
     },
 
+    prepareNewClientFields() {
+        const sel = document.getElementById('no-client-select');
+        const nameInput = document.getElementById('no-client-name');
+        const phoneInput = document.getElementById('no-client-phone');
+        const addressInput = document.getElementById('no-client-address');
+        if (sel) sel.value = '__new__';
+        if (nameInput) {
+            nameInput.value = '';
+            nameInput.focus();
+        }
+        if (phoneInput) phoneInput.value = '';
+        if (addressInput) addressInput.value = '';
+        this._selectedClientId = null;
+        this._selectedClientName = null;
+        if (typeof Toast !== 'undefined') Toast.show('Completa los datos del nuevo cliente', 'info', 1500);
+    },
+
     onClientTyped() {
         const sel = document.getElementById('no-client-select');
-        if (sel && sel.value) {
+        if (sel && sel.value && sel.value !== '__new__') {
             sel.value = '';
             this._selectedClientId = null;
             this._selectedClientName = null;
