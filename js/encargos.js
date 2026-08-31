@@ -97,7 +97,7 @@ const EncargosModule = {
 
     _updateKpis() {
         const now = Date.now();
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = Utils.todayStr();
 
         let hoyCount = 0;
         let alertaCount = 0;
@@ -112,7 +112,7 @@ const EncargosModule = {
             if (o.status === 'cancelado') return;
 
             const dTime = new Date(o.delivery_datetime).getTime();
-            const dDateStr = new Date(o.delivery_datetime).toISOString().slice(0, 10);
+            const dDateStr = Utils.toArgentinaDateStr(o.delivery_datetime);
             const alertThreshold = dTime - (o.alert_lead_minutes * 60 * 1000);
 
             if (dDateStr === todayStr) hoyCount++;
@@ -136,11 +136,11 @@ const EncargosModule = {
         if (!grid) return;
 
         const now = Date.now();
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = Utils.todayStr();
 
         let filtered = this._orders.filter(o => {
             const dTime = new Date(o.delivery_datetime).getTime();
-            const dDateStr = new Date(o.delivery_datetime).toISOString().slice(0, 10);
+            const dDateStr = Utils.toArgentinaDateStr(o.delivery_datetime);
             const alertThreshold = dTime - (o.alert_lead_minutes * 60 * 1000);
 
             // Filtro por Tab

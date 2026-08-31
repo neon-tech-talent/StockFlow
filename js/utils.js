@@ -1,13 +1,91 @@
 const Utils = {
+    TIMEZONE: 'America/Argentina/Buenos_Aires',
+
     currency(n) { 
         return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 }).format(n || 0); 
     },
+
+    // Fecha y hora completa en Argentina (DD/MM/AAAA, HH:mm)
     date(iso) { 
-        return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); 
+        if (!iso) return '';
+        return new Date(iso).toLocaleString('es-AR', { 
+            timeZone: this.TIMEZONE, 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false
+        }) + ' hs'; 
     },
+
+    // Fecha corta en Argentina (DD/MM/AAAA)
     dateShort(iso) { 
-        return new Date(iso).toLocaleDateString('es-AR'); 
+        if (!iso) return '';
+        return new Date(iso).toLocaleDateString('es-AR', { timeZone: this.TIMEZONE }); 
     },
+
+    // Hora en Argentina (HH:mm)
+    time(iso) {
+        if (!iso) return '';
+        return new Date(iso).toLocaleTimeString('es-AR', { 
+            timeZone: this.TIMEZONE, 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false
+        });
+    },
+
+    // Fecha de hoy en Argentina (YYYY-MM-DD)
+    todayStr() {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: this.TIMEZONE }).format(new Date());
+    },
+
+    // Fecha de una fecha dada en formato YYYY-MM-DD en Argentina
+    toArgentinaDateStr(dateOrIso) {
+        if (!dateOrIso) return '';
+        const d = (dateOrIso instanceof Date) ? dateOrIso : new Date(dateOrIso);
+        if (isNaN(d.getTime())) return '';
+        return new Intl.DateTimeFormat('en-CA', { timeZone: this.TIMEZONE }).format(d);
+    },
+
+    // Año, mes (0-11) y día en Argentina
+    getArgentinaYearMonth(date = new Date()) {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: this.TIMEZONE,
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric'
+        }).formatToParts(date);
+        const y = parseInt(parts.find(p => p.type === 'year').value, 10);
+        const m = parseInt(parts.find(p => p.type === 'month').value, 10) - 1;
+        const d = parseInt(parts.find(p => p.type === 'day').value, 10);
+        return { year: y, month: m, day: d };
+    },
+
+    // Siguiente hora en punto en Argentina (ej: 22:00)
+    nextHourTimeStr() {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: this.TIMEZONE,
+            hour: 'numeric',
+            hour12: false
+        }).formatToParts(new Date());
+        const hourPart = parts.find(p => p.type === 'hour');
+        const curHour = hourPart ? parseInt(hourPart.value, 10) : new Date().getHours();
+        const nextHour = (curHour + 1) % 24;
+        return `${String(nextHour).padStart(2, '0')}:00`;
+    },
+
+    // Hora actual HH:mm en Argentina
+    currentTimeStr() {
+        return new Intl.DateTimeFormat('es-AR', {
+            timeZone: this.TIMEZONE,
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(new Date()).trim();
+    },
+
     paymentLabel(t) {
         return { efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta Corriente', qr: 'MercadoPago / QR' }[t] || t;
     },
