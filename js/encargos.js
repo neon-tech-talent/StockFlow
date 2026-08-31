@@ -5,6 +5,10 @@ const EncargosModule = {
     _cart: [],
     _selectedClientId: null,
     _selectedClientName: null,
+    _allProducts: [],
+    _selectedProduct: null,
+    _filteredProducts: [],
+    _highlightedIndex: -1,
 
     async render(el) {
         this._orders = await DB.getCustomOrders();
@@ -284,8 +288,12 @@ const EncargosModule = {
         this._cart = [];
         this._selectedClientId = null;
         this._selectedClientName = null;
+        this._selectedProduct = null;
+        this._highlightedIndex = -1;
 
         const allProducts = await DB.getProducts();
+        this._allProducts = allProducts || [];
+        this._filteredProducts = [...this._allProducts];
         const clients = await DB.getClients();
         let existingOrder = null;
 
@@ -355,17 +363,58 @@ const EncargosModule = {
           </div>
         </div>
 
-        <!-- Sección 2: Productos Encargados -->
-        <div class="card" style="margin-bottom:1.1rem; padding:1.1rem;">
-          <h4 class="card-title" style="margin-bottom:0.75rem;">📦 Productos del Encargo</h4>
-          <div style="display:flex; gap:0.5rem; margin-bottom:0.85rem;">
-            <select id="no-prod-select" class="form-input" style="flex:2;">
-              <option value="">-- Seleccionar Producto del Inventario --</option>
-              ${allProducts.map(p => `<option value="${p.id}" data-name="${Utils.escHtml(p.name)}" data-price="${p.sell_price}">${Utils.escHtml(p.name)} (${Utils.currency(p.sell_price)})</option>`).join('')}
-            </select>
-            <input id="no-prod-qty" type="number" step="any" min="0.001" value="1" class="form-input" style="flex:1; max-width:85px;" placeholder="Cant.">
-            <button type="button" class="btn btn-outline" onclick="EncargosModule.addItemToCart()">➕ Agregar</button>
+        <!-- Sección 2: Productos Encargados con Buscador -->
+        <div class="card" style="margin-bottom:1.1rem; padding:1.1rem; overflow:visible;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+            <h4 class="card-title" style="margin:0;">📦 Productos del Encargo</h4>
+            <span class="text-muted" style="font-size:0.78rem;">${allProducts.length} productos en catálogo</span>
           </div>
+
+          <div style="display:flex; gap:0.5rem; margin-bottom:0.85rem; align-items:flex-start; flex-wrap:wrap;">
+            <!-- Buscador de Producto -->
+            <div class="encargo-prod-search-wrapper">
+              <div class="encargo-prod-search-input-box">
+                <span class="encargo-prod-search-icon">🔍</span>
+                <input id="no-prod-search" 
+                       type="text" 
+                       class="form-input" 
+                       placeholder="Buscar producto por nombre..." 
+                       autocomplete="off" 
+                       oninput="EncargosModule.onProductSearch(this.value)" 
+                       onfocus="EncargosModule.onProductSearchFocus()" 
+                       onkeydown="EncargosModule.onProductSearchKeydown(event)">
+                <button id="no-prod-clear-btn" 
+                        type="button" 
+                        class="encargo-prod-clear-btn" 
+                        style="display:none;" 
+                        onclick="EncargosModule.clearSelectedProduct()" 
+                        title="Limpiar búsqueda">✕</button>
+              </div>
+              <div id="no-prod-dropdown" class="encargo-prod-dropdown"></div>
+              <div id="no-prod-selected-preview"></div>
+            </div>
+
+            <!-- Cantidad con Unidad -->
+            <div style="display:flex; gap:0.35rem; align-items:center;">
+              <input id="no-prod-qty" 
+                     type="number" 
+                     step="any" 
+                     min="0.001" 
+                     value="1" 
+                     class="form-input" 
+                     style="width:75px; text-align:center;" 
+                     placeholder="Cant."
+                     onkeydown="if(event.key==='Enter'){event.preventDefault(); EncargosModule.addItemToCart();}">
+              <span id="no-prod-unit-label" style="font-size:0.75rem; color:var(--text-muted); min-width:18px;">u.</span>
+            </div>
+
+            <!-- Botón Agregar -->
+            <button type="button" class="btn btn-outline" onclick="EncargosModule.addItemToCart()" style="white-space:nowrap; padding:0.55rem 0.95rem;">
+              ➕ Agregar
+            </button>
+          </div>
+
+          <!-- Lista de Carrito del Encargo -->
           <div id="no-cart-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:160px; overflow-y:auto;"></div>
         </div>
 
@@ -435,27 +484,233 @@ const EncargosModule = {
         </div>
       </form>`);
 
+        // Cerrar dropdown al hacer click fuera del buscador
+        setTimeout(() => {
+            const dropdown = document.getElementById('no-prod-dropdown');
+            const wrapper = document.querySelector('.encargo-prod-search-wrapper');
+            if (dropdown && wrapper) {
+                const outsideClickListener = (evt) => {
+                    if (!wrapper.contains(evt.target)) {
+                        dropdown.classList.remove('active');
+                    }
+                };
+                document.addEventListener('click', outsideClickListener);
+            }
+        }, 100);
+
         this._renderCartList();
         this.updateCartTotals();
     },
 
-    addItemToCart() {
-        const select = document.getElementById('no-prod-select');
-        const qtyInput = document.getElementById('no-prod-qty');
-        if (!select || !select.value) {
-            if (typeof Toast !== 'undefined') Toast.show('Selecciona un producto', 'warning');
+    /* ── MÉTODOS DEL BUSCADOR DE PRODUCTOS ── */
+    onProductSearch(val) {
+        const q = (val || '').trim().toLowerCase();
+        const clearBtn = document.getElementById('no-prod-clear-btn');
+        if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
+        if (!q) {
+            this._filteredProducts = [...this._allProducts];
+        } else {
+            this._filteredProducts = this._allProducts.filter(p => 
+                (p.name && p.name.toLowerCase().includes(q)) ||
+                (p.category && p.category.toLowerCase().includes(q))
+            );
+        }
+
+        if (this._selectedProduct && this._selectedProduct.name.toLowerCase() !== q) {
+            this._selectedProduct = null;
+            this._updateSelectedPreview();
+        }
+
+        this._highlightedIndex = this._filteredProducts.length > 0 ? 0 : -1;
+        this._renderProductDropdown(q);
+    },
+
+    onProductSearchFocus() {
+        const searchInput = document.getElementById('no-prod-search');
+        const q = (searchInput?.value || '').trim().toLowerCase();
+        if (!q) {
+            this._filteredProducts = [...this._allProducts];
+        } else {
+            this._filteredProducts = this._allProducts.filter(p => 
+                (p.name && p.name.toLowerCase().includes(q)) ||
+                (p.category && p.category.toLowerCase().includes(q))
+            );
+        }
+        this._highlightedIndex = this._filteredProducts.length > 0 ? 0 : -1;
+        this._renderProductDropdown(q);
+    },
+
+    _renderProductDropdown(q = '') {
+        const dropdown = document.getElementById('no-prod-dropdown');
+        if (!dropdown) return;
+
+        if (!this._filteredProducts.length) {
+            dropdown.innerHTML = `
+                <div style="padding:0.75rem 1rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">
+                  🔍 Sin resultados${q ? ` para "<strong>${Utils.escHtml(q)}</strong>"` : ''}
+                </div>`;
+            dropdown.classList.add('active');
             return;
         }
 
-        const prodId = select.value;
-        const opt = select.selectedOptions[0];
-        const name = opt.dataset.name;
-        const price = parseFloat(opt.dataset.price) || 0;
-        const qty = parseFloat(qtyInput.value) || 1;
+        dropdown.innerHTML = this._filteredProducts.slice(0, 30).map((p, idx) => {
+            const isHighlighted = idx === this._highlightedIndex;
+            return `
+              <div class="encargo-prod-item ${isHighlighted ? 'focused' : ''}" 
+                   id="prod-item-${idx}"
+                   onmousedown="event.preventDefault(); EncargosModule.selectProduct('${p.id}')">
+                <div>
+                  <div class="encargo-prod-item-name">${Utils.escHtml(p.name)}</div>
+                  <div class="encargo-prod-item-stock">Stock: <strong>${p.stock ?? 0}</strong> ${Utils.escHtml(p.unit || 'u.')}</div>
+                </div>
+                <div class="encargo-prod-item-meta">
+                  <span class="encargo-prod-item-price">${Utils.currency(p.sell_price)}</span>
+                </div>
+              </div>`;
+        }).join('');
+
+        dropdown.classList.add('active');
+    },
+
+    onProductSearchKeydown(e) {
+        const dropdown = document.getElementById('no-prod-dropdown');
+        const isActive = dropdown && dropdown.classList.contains('active');
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!isActive) {
+                this.onProductSearchFocus();
+                return;
+            }
+            if (this._filteredProducts.length > 0) {
+                this._highlightedIndex = (this._highlightedIndex + 1) % Math.min(this._filteredProducts.length, 30);
+                this._updateDropdownHighlight();
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!isActive) return;
+            if (this._filteredProducts.length > 0) {
+                this._highlightedIndex = (this._highlightedIndex - 1 + Math.min(this._filteredProducts.length, 30)) % Math.min(this._filteredProducts.length, 30);
+                this._updateDropdownHighlight();
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (isActive && this._highlightedIndex >= 0 && this._filteredProducts[this._highlightedIndex]) {
+                this.selectProduct(this._filteredProducts[this._highlightedIndex].id);
+            } else if (this._selectedProduct) {
+                this.addItemToCart();
+            } else if (this._filteredProducts.length === 1) {
+                this.selectProduct(this._filteredProducts[0].id);
+            }
+        } else if (e.key === 'Escape') {
+            if (dropdown) dropdown.classList.remove('active');
+        }
+    },
+
+    _updateDropdownHighlight() {
+        document.querySelectorAll('.encargo-prod-item').forEach((el, idx) => {
+            el.classList.toggle('focused', idx === this._highlightedIndex);
+            if (idx === this._highlightedIndex) {
+                el.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    },
+
+    selectProduct(prodId) {
+        const prod = this._allProducts.find(p => p.id === prodId);
+        if (!prod) return;
+
+        this._selectedProduct = prod;
+
+        const searchInput = document.getElementById('no-prod-search');
+        const clearBtn = document.getElementById('no-prod-clear-btn');
+        const dropdown = document.getElementById('no-prod-dropdown');
+        const unitLabel = document.getElementById('no-prod-unit-label');
+        const qtyInput = document.getElementById('no-prod-qty');
+
+        if (searchInput) searchInput.value = prod.name;
+        if (clearBtn) clearBtn.style.display = 'flex';
+        if (dropdown) dropdown.classList.remove('active');
+        if (unitLabel) unitLabel.textContent = prod.unit || 'u.';
+
+        this._updateSelectedPreview();
+
+        if (qtyInput) {
+            qtyInput.focus();
+            qtyInput.select();
+        }
+    },
+
+    _updateSelectedPreview() {
+        const preview = document.getElementById('no-prod-selected-preview');
+        if (!preview) return;
+
+        if (!this._selectedProduct) {
+            preview.innerHTML = '';
+            return;
+        }
+
+        const p = this._selectedProduct;
+        preview.innerHTML = `
+          <div class="encargo-selected-badge">
+            <span>✅ <strong>${Utils.escHtml(p.name)}</strong> (${Utils.currency(p.sell_price)}) • Stock: ${p.stock ?? 0} ${Utils.escHtml(p.unit || 'u.')}</span>
+            <button type="button" onclick="EncargosModule.clearSelectedProduct()" style="background:none; border:none; color:inherit; cursor:pointer; font-size:0.8rem; padding:0 0.2rem;" title="Quitar selección">✕</button>
+          </div>`;
+    },
+
+    clearSelectedProduct() {
+        this._selectedProduct = null;
+        this._highlightedIndex = -1;
+        const searchInput = document.getElementById('no-prod-search');
+        const clearBtn = document.getElementById('no-prod-clear-btn');
+        const dropdown = document.getElementById('no-prod-dropdown');
+        const unitLabel = document.getElementById('no-prod-unit-label');
+
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.focus();
+        }
+        if (clearBtn) clearBtn.style.display = 'none';
+        if (dropdown) dropdown.classList.remove('active');
+        if (unitLabel) unitLabel.textContent = 'u.';
+        this._updateSelectedPreview();
+    },
+
+    addItemToCart() {
+        const qtyInput = document.getElementById('no-prod-qty');
+        const qty = parseFloat(qtyInput?.value) || 1;
+
+        if (qty <= 0) {
+            if (typeof Toast !== 'undefined') Toast.show('La cantidad debe ser mayor a 0', 'warning');
+            return;
+        }
+
+        let prod = this._selectedProduct;
+        if (!prod) {
+            const searchVal = (document.getElementById('no-prod-search')?.value || '').trim().toLowerCase();
+            if (searchVal) {
+                prod = this._allProducts.find(p => p.name.toLowerCase() === searchVal);
+                if (!prod && this._filteredProducts.length === 1) {
+                    prod = this._filteredProducts[0];
+                }
+            }
+        }
+
+        if (!prod) {
+            if (typeof Toast !== 'undefined') Toast.show('Selecciona un producto del buscador', 'warning');
+            const searchInput = document.getElementById('no-prod-search');
+            if (searchInput) searchInput.focus();
+            return;
+        }
+
+        const prodId = prod.id;
+        const name = prod.name;
+        const price = parseFloat(prod.sell_price) || 0;
 
         const exist = this._cart.find(x => x.productId === prodId);
         if (exist) {
-            exist.quantity += qty;
+            exist.quantity = Math.round((exist.quantity + qty) * 1000) / 1000;
             exist.subtotal = exist.quantity * exist.unitPrice;
         } else {
             this._cart.push({
@@ -467,9 +722,16 @@ const EncargosModule = {
             });
         }
 
-        qtyInput.value = '1';
+        if (typeof Toast !== 'undefined') Toast.show(`Agregado: ${qty}x ${name}`, 'info', 1200);
+
+        this.clearSelectedProduct();
+        if (qtyInput) qtyInput.value = '1';
+
         this._renderCartList();
         this.updateCartTotals();
+
+        const searchInput = document.getElementById('no-prod-search');
+        if (searchInput) searchInput.focus();
     },
 
     removeItemFromCart(idx) {

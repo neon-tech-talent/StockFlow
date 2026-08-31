@@ -1404,6 +1404,129 @@ body.body-menu-open { overflow: hidden !important; touch-action: none; }
   flex-wrap: wrap;
 }
 
+/* ── ENCARGOS PRODUCT SEARCH AUTOCOMPLETE ── */
+.encargo-prod-search-wrapper {
+  position: relative;
+  flex: 2;
+  min-width: 220px;
+}
+
+.encargo-prod-search-input-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.encargo-prod-search-input-box input {
+  width: 100%;
+  padding-left: 2.2rem;
+  padding-right: 2.2rem;
+}
+
+.encargo-prod-search-icon {
+  position: absolute;
+  left: 0.75rem;
+  font-size: 0.95rem;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.encargo-prod-clear-btn {
+  position: absolute;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.encargo-prod-clear-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-card-hover);
+}
+
+.encargo-prod-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 1050;
+  display: none;
+  flex-direction: column;
+}
+
+.encargo-prod-dropdown.active {
+  display: flex;
+}
+
+.encargo-prod-item {
+  padding: 0.55rem 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.12s ease;
+}
+
+.encargo-prod-item:last-child {
+  border-bottom: none;
+}
+
+.encargo-prod-item:hover,
+.encargo-prod-item.focused {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+}
+
+.encargo-prod-item-name {
+  font-weight: 600;
+  color: var(--text-main);
+  font-size: 0.88rem;
+}
+
+.encargo-prod-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.encargo-prod-item-price {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.88rem;
+}
+
+.encargo-selected-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--accent-light);
+}
+
 /* ── TURNOS INTERACTIVE CALENDAR ── */
 .turnos-calendar-box {
   background: var(--bg-card);
