@@ -373,11 +373,6 @@ const SalesModule = {
         }
     },
 
-        if (typeof anime !== 'undefined') {
-            anime({ targets: '.cart-item-card', opacity: [0, 1], translateY: [10, 0], delay: anime.stagger(50), duration: 400, easing: 'easeOutQuad' });
-        }
-    },
-
     async _searchClients(q) {
         const res = document.getElementById('cl-results');
         if (q.length < 2) { res.innerHTML = ''; return; }
