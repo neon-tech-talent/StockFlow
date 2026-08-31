@@ -123,9 +123,14 @@ const StockModule = {
           <input name="name" class="form-input" required value="${Utils.escHtml(s?.name || '')}"></div>
         <div class="form-row">
           <div class="form-group"><label>Stock Inicial *</label>
-            <input name="stock" type="number" min="0" class="form-input" required value="${s?.stock ?? ''}"></div>
-          <div class="form-group"><label>Unidad de medida</label>
-            <input name="unit" class="form-input" placeholder="unidades" value="${Utils.escHtml(s?.unit || '')}"></div>
+            <input name="stock" type="number" step="any" min="0" class="form-input" required value="${s?.stock ?? ''}"></div>
+          <div class="form-group"><label>Unidad de Medida *</label>
+            <select name="unit" class="form-input" required>
+              <option value="Unidades" ${(!s || !s.unit || s.unit === 'Unidades' || s.unit === 'unidades') ? 'selected' : ''}>Unidades</option>
+              <option value="Gramos" ${(s?.unit === 'Gramos' || s?.unit === 'gramos') ? 'selected' : ''}>Gramos</option>
+              <option value="Litros" ${(s?.unit === 'Litros' || s?.unit === 'litros') ? 'selected' : ''}>Litros</option>
+            </select>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
@@ -139,7 +144,7 @@ const StockModule = {
         const f = e.target;
         await DB.saveSupply({
             id: id || undefined, name: f.name.value.trim(),
-            stock: parseInt(f.stock.value), unit: f.unit.value.trim()
+            stock: parseFloat(f.stock.value) || 0, unit: f.unit.value
         });
         Modal.close();
         if (typeof Toast !== 'undefined') Toast.show(id ? 'Insumo actualizado' : 'Nuevo insumo registrado', 'success');
@@ -171,7 +176,7 @@ const StockModule = {
           </select></div>
         <div class="form-row">
           <div class="form-group"><label>Cantidad a descontar *</label>
-            <input name="quantity" type="number" min="1" class="form-input" required></div>
+            <input name="quantity" type="number" step="any" min="0.001" class="form-input" required></div>
           <div class="form-group"><label>Motivo del uso *</label>
             <input name="reason" class="form-input" placeholder="Ej: Preparación de pedido..." required></div>
         </div>
@@ -189,7 +194,7 @@ const StockModule = {
         const productName = f.productId.options[f.productId.selectedIndex].text.split(' (Queda:')[0];
         await DB.saveDeduction({
             productId, productName,
-            quantity: parseInt(f.quantity.value),
+            quantity: parseFloat(f.quantity.value) || 0,
             reason: f.reason.value.trim()
         });
         Modal.close();
@@ -281,7 +286,7 @@ const StockModule = {
         </div>
         <div class="form-row">
           <div class="form-group"><label>Stock *</label>
-            <input name="stock" type="number" min="0" class="form-input" required value="${p?.stock ?? ''}"></div>
+            <input name="stock" type="number" step="any" min="0" class="form-input" required value="${p?.stock ?? ''}"></div>
           <div class="form-group"><label>Unidad de Medida *</label>
             <select name="unit" class="form-input" required>
               <option value="Unidades" ${(!p || !p.unit || p.unit === 'Unidades') ? 'selected' : ''}>Unidades</option>
@@ -298,7 +303,7 @@ const StockModule = {
 
     async saveProduct(e, id) {
         e.preventDefault(); const f = e.target;
-        await DB.saveProduct({ id: id||undefined, name: f.name.value.trim(), categoryId: f.categoryId.value, sellPrice: parseFloat(f.sellPrice.value), costPrice: parseFloat(f.costPrice.value), stock: parseInt(f.stock.value), unit: f.unit.value });
+        await DB.saveProduct({ id: id||undefined, name: f.name.value.trim(), categoryId: f.categoryId.value, sellPrice: parseFloat(f.sellPrice.value), costPrice: parseFloat(f.costPrice.value), stock: parseFloat(f.stock.value) || 0, unit: f.unit.value });
         Modal.close();
         if (typeof Toast !== 'undefined') Toast.show(id ? 'Producto actualizado' : 'Nuevo producto creado', 'success');
         await this._renderProducts(document.getElementById('stock-tab-content'));
