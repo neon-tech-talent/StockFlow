@@ -4,8 +4,10 @@ const TurnosModule = {
   _calYear: new Date().getFullYear(),
   _calMonth: new Date().getMonth(), // 0 to 11
   _selectedProfId: '',
+  _selectedFilterClientId: '',
   _searchQuery: '',
   _statusFilter: 'activos', // 'activos' | 'todos' | 'atendido' | 'cancelado'
+  _viewAllFiltered: false,
   _selectedClientId: null,
 
   async render(el, activeTab = null) {
@@ -79,7 +81,7 @@ const TurnosModule = {
     if (!box) return;
 
     if (this._activeTab === 'agenda') {
-      await this._renderAgendaTab(box, profs);
+      await this._renderAgendaTab(box, profs, clients);
     } else {
       this._renderCargarTab(box, profs, services, clients, defaultTime);
     }
@@ -92,14 +94,14 @@ const TurnosModule = {
   /* ─────────────────────────────────────────────────────────────
      PESTAÑA 1: CALENDARIO INTERACTIVO Y LISTA DE TURNOS DESPLEGADA
   ───────────────────────────────────────────────────────────── */
-  async _renderAgendaTab(box, profs) {
+  async _renderAgendaTab(box, profs, clients) {
     box.innerHTML = `
       <!-- Barra Superior de Filtros y Búsqueda -->
       <div class="card" style="padding:1.15rem 1.25rem; margin-bottom:1.25rem;">
         <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
           
           <!-- Buscador Rápido -->
-          <div style="flex:1.2; min-width:240px;">
+          <div style="flex:1.4; min-width:240px;">
             <input id="filter-search" type="text" placeholder="🔍 Buscar cliente, teléfono, servicio o responsable..." class="form-input" style="padding:0.5rem 0.85rem;" value="${Utils.escHtml(this._searchQuery)}">
           </div>
 
@@ -108,6 +110,14 @@ const TurnosModule = {
             <select id="filter-prof" class="form-input" style="width:auto; padding:0.5rem 0.85rem;" onchange="TurnosModule.onProfFilterChange(this.value)">
               <option value="">👤 Todos los Responsables</option>
               ${profs.map(p => `<option value="${p.id}" ${this._selectedProfId === p.id ? 'selected' : ''}>${Utils.escHtml(p.first_name + ' ' + (p.last_name || ''))}</option>`).join('')}
+            </select>
+          </div>
+
+          <!-- Filtro por Cliente -->
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <select id="filter-client" class="form-input" style="width:auto; padding:0.5rem 0.85rem;" onchange="TurnosModule.onClientFilterChange(this.value)">
+              <option value="">👥 Todos los Clientes</option>
+              ${clients.map(c => `<option value="${c.id}" ${this._selectedFilterClientId === c.id ? 'selected' : ''}>${Utils.escHtml(c.name)}</option>`).join('')}
             </select>
           </div>
 
@@ -132,7 +142,7 @@ const TurnosModule = {
         <div id="calendar-grid-container"></div>
       </div>
 
-      <!-- SECCIÓN DESPLEGADA DE TURNOS DEL DÍA SELECCIONADO -->
+      <!-- SECCIÓN DESPLEGADA DE TURNOS DEL DÍA / FILTRADOS -->
       <div id="turnos-day-details-container" style="display:flex; flex-direction:column; gap:0.85rem;"></div>`;
 
     this._setupSearchListener();
@@ -157,9 +167,20 @@ const TurnosModule = {
     this._renderSelectedDayAppointments();
   },
 
+  onClientFilterChange(clientId) {
+    this._selectedFilterClientId = clientId;
+    this._renderCalendar();
+    this._renderSelectedDayAppointments();
+  },
+
   onStatusFilterChange(status) {
     this._statusFilter = status;
     this._renderCalendar();
+    this._renderSelectedDayAppointments();
+  },
+
+  toggleViewAllFiltered() {
+    this._viewAllFiltered = !this._viewAllFiltered;
     this._renderSelectedDayAppointments();
   },
 
@@ -283,12 +304,14 @@ const TurnosModule = {
     this._calMonth = now.getMonth();
     this._calYear = now.getFullYear();
     this._selectedDate = now.toISOString().slice(0, 10);
+    this._viewAllFiltered = false;
     this._renderCalendar();
     this._renderSelectedDayAppointments();
   },
 
   async selectCalendarDay(dateStr) {
     this._selectedDate = dateStr;
+    this._viewAllFiltered = false;
 
     // Actualizar clase seleccionada en la grilla
     document.querySelectorAll('.cal-day-cell').forEach(c => c.classList.remove('cal-day-selected'));
@@ -312,6 +335,13 @@ const TurnosModule = {
       appts = appts.filter(a => a.professional_id === this._selectedProfId);
     }
 
+    if (this._selectedFilterClientId) {
+      const clients = await DB.getClients();
+      const selClient = clients.find(c => c.id === this._selectedFilterClientId);
+      const cName = selClient ? selClient.name.toLowerCase() : '';
+      appts = appts.filter(a => a.client_id === this._selectedFilterClientId || (cName && (a.client_name || '').toLowerCase() === cName));
+    }
+
     if (this._statusFilter === 'activos') {
       appts = appts.filter(a => a.status !== 'cancelado' && a.status !== 'atendido' && a.status !== 'completado');
     } else if (this._statusFilter === 'atendido') {
@@ -332,13 +362,17 @@ const TurnosModule = {
     return appts;
   },
 
-  /* ── RENDERIZAR LISTA DE TURNOS DEL DÍA SELECCIONADO ── */
+  /* ── RENDERIZAR LISTA DE TURNOS DEL DÍA / FILTRADOS ── */
   async _renderSelectedDayAppointments() {
     const container = document.getElementById('turnos-day-details-container');
     if (!container) return;
 
     const allAppts = await this._getFilteredAppointments();
-    const dayAppts = allAppts.filter(a => (a.start_datetime || '').slice(0, 10) === this._selectedDate);
+    const isFilterActive = !!(this._selectedProfId || this._selectedFilterClientId || this._searchQuery);
+    
+    // Modo de visualización: todos los filtrados vs día seleccionado
+    const showAllFiltered = this._viewAllFiltered && isFilterActive;
+    const targetAppts = showAllFiltered ? allAppts : allAppts.filter(a => (a.start_datetime || '').slice(0, 10) === this._selectedDate);
 
     const dateFormatted = new Date(`${this._selectedDate}T00:00:00`).toLocaleDateString('es-AR', {
       weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
@@ -350,33 +384,46 @@ const TurnosModule = {
       <div class="cal-day-detail-header">
         <div>
           <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); font-weight:800;">
-            📅 Turnos del ${dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)} ${isToday ? '<span class="badge badge-success" style="font-size:0.75rem; margin-left:0.4rem;">HOY</span>' : ''}
+            ${showAllFiltered 
+              ? `🔍 Todos los Turnos Filtrados (${targetAppts.length})` 
+              : `📅 Turnos del ${dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)} ${isToday ? '<span class="badge badge-success" style="font-size:0.75rem; margin-left:0.4rem;">HOY</span>' : ''}`}
           </h3>
-          <small class="text-muted">${dayAppts.length} ${dayAppts.length === 1 ? 'turno agendado' : 'turnos agendados'} para este día</small>
+          <small class="text-muted">
+            ${showAllFiltered 
+              ? `Mostrando todos los turnos que coinciden con los filtros de responsable, cliente o búsqueda` 
+              : `${targetAppts.length} ${targetAppts.length === 1 ? 'turno agendado' : 'turnos agendados'} para este día`}
+          </small>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar', '${this._selectedDate}')">
-          ➕ Agendar Turno para este día
-        </button>
+        <div class="btn-row" style="gap:0.5rem; flex-wrap:wrap;">
+          ${isFilterActive ? `
+            <button class="btn btn-sm ${showAllFiltered ? 'btn-primary' : 'btn-outline'}" onclick="TurnosModule.toggleViewAllFiltered()">
+              ${showAllFiltered ? '📅 Ver solo día seleccionado' : `📋 Ver todos los encontrados (${allAppts.length})`}
+            </button>
+          ` : ''}
+          <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar', '${this._selectedDate}')">
+            ➕ Agendar Turno
+          </button>
+        </div>
       </div>`;
 
-    if (!dayAppts.length) {
+    if (!targetAppts.length) {
       html += Utils.emptyState(
         '🗓️',
-        `No hay turnos programados para el ${this._selectedDate}`,
+        showAllFiltered ? 'No se encontraron turnos con los filtros aplicados' : `No hay turnos programados para el ${this._selectedDate}`,
         'Puedes agendar un turno para este día haciendo clic en el botón superior'
       );
       container.innerHTML = html;
       return;
     }
 
-    // Detectar turnos paralelos en el día
+    // Detectar turnos paralelos en el conjunto visible
     const timeCountMap = {};
-    dayAppts.forEach(a => {
+    targetAppts.forEach(a => {
       const timeKey = (a.start_datetime || '').slice(0, 16);
       timeCountMap[timeKey] = (timeCountMap[timeKey] || 0) + 1;
     });
 
-    html += dayAppts.map(a => {
+    html += targetAppts.map(a => {
       const isCancelled = a.status === 'cancelado';
       const isCompleted = a.status === 'atendido' || a.status === 'completado';
       const timeKey = (a.start_datetime || '').slice(0, 16);
@@ -384,6 +431,7 @@ const TurnosModule = {
 
       const dateObj = new Date(a.start_datetime);
       const timeStr = dateObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      const dayStr = dateObj.toLocaleDateString('es-AR', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
       let statusBadge = `<span class="badge badge-success">Confirmado</span>`;
       if (isCancelled) statusBadge = `<span class="badge badge-danger">Cancelado</span>`;
@@ -391,7 +439,7 @@ const TurnosModule = {
       else if (a.status === 'reprogramado') statusBadge = `<span class="badge badge-warning">Reprogramado</span>`;
 
       const phoneClean = (a.client_phone || '').replace(/\D/g, '');
-      const waLink = phoneClean ? `https://wa.me/${phoneClean.startsWith('54') ? phoneClean : '54' + phoneClean}?text=${encodeURIComponent(`¡Hola ${a.client_name}! Te recordamos tu turno de ${a.service_name} el día ${this._selectedDate} a las ${timeStr} hs.`)}` : null;
+      const waLink = phoneClean ? `https://wa.me/${phoneClean.startsWith('54') ? phoneClean : '54' + phoneClean}?text=${encodeURIComponent(`¡Hola ${a.client_name}! Te recordamos tu turno de ${a.service_name} el día ${dayStr} a las ${timeStr} hs.`)}` : null;
 
       return `
         <div class="card" style="padding:1.15rem 1.35rem; border-left: 5px solid ${isCancelled ? '#475569' : isCompleted ? 'var(--blue)' : 'var(--accent)'}; transition:all 0.2s ease;">
@@ -400,6 +448,7 @@ const TurnosModule = {
             <div>
               <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.35rem; flex-wrap:wrap;">
                 <strong style="font-size:1.25rem; color:var(--accent-light); letter-spacing:-0.01em;">⏰ ${timeStr} hs</strong>
+                ${showAllFiltered ? `<span class="badge" style="background:var(--bg-main); border:1px solid var(--border); font-size:0.75rem;">📅 ${dayStr}</span>` : ''}
                 ${statusBadge}
                 ${isParallel ? `<span class="badge" style="background:rgba(212,175,55,0.15); color:var(--accent); border:1px solid var(--border);">⚡ Turno en Paralelo</span>` : ''}
               </div>
