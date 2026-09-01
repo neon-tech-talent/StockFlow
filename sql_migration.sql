@@ -235,9 +235,11 @@ SELECT id, 'turnos', true
 FROM admin_users WHERE username = 'guaja'
 ON CONFLICT (admin_id, module_key) DO NOTHING;
 
--- 11. CANTIDADES DECIMALES PARA VENTA Y DEDUCCIONES POR KG Y LITROS
+-- 11. SOPORTE DE STOCK Y CANTIDADES DECIMALES (KG, LITROS)
 DO $$
 BEGIN
+  ALTER TABLE products ALTER COLUMN stock TYPE numeric(12,3);
+  ALTER TABLE supplies ALTER COLUMN stock TYPE numeric(12,3);
   ALTER TABLE sale_items ALTER COLUMN quantity TYPE numeric(12,3);
   ALTER TABLE supply_deductions ALTER COLUMN quantity TYPE numeric(12,3);
 EXCEPTION WHEN OTHERS THEN
