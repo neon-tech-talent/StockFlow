@@ -45,20 +45,40 @@ const SalesModule = {
 
       <div class="kpi-row" style="margin-bottom: 1.5rem">
         <div class="kpi-card" style="border-left: 4px solid var(--accent)">
-            <div class="kpi-label">Efectivo</div>
-            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.efectivo)}</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Efectivo</span>
+            <div class="kpi-icon" aria-hidden="true">💵</div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value" style="color:var(--accent)" title="${Utils.currency(totals.efectivo)}">${Utils.currency(totals.efectivo)}</div>
+          </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid #3b82f6">
-            <div class="kpi-label">Transf / QR</div>
-            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.transferencia + totals.qr)}</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Transf / QR</span>
+            <div class="kpi-icon" aria-hidden="true">📱</div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value" style="color:#3b82f6" title="${Utils.currency(totals.transferencia + totals.qr)}">${Utils.currency(totals.transferencia + totals.qr)}</div>
+          </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid #ef4444">
-            <div class="kpi-label">Tarjetas (D+C)</div>
-            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.debito + totals.credito)}</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Tarjetas (D+C)</span>
+            <div class="kpi-icon" aria-hidden="true">💳</div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value" style="color:#ef4444" title="${Utils.currency(totals.debito + totals.credito)}">${Utils.currency(totals.debito + totals.credito)}</div>
+          </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid #10b981">
-            <div class="kpi-label">Cta. Corriente</div>
-            <div class="kpi-value" style="font-size:1.1rem">${Utils.currency(totals.cuenta_corriente)}</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Cta. Corriente</span>
+            <div class="kpi-icon" aria-hidden="true">📒</div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value" style="color:#10b981" title="${Utils.currency(totals.cuenta_corriente)}">${Utils.currency(totals.cuenta_corriente)}</div>
+          </div>
         </div>
       </div>
 

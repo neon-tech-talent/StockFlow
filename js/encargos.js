@@ -28,31 +28,39 @@ const EncargosModule = {
       <!-- Métricas / Semáforo Header -->
       <div class="kpi-row" style="margin-bottom:1.25rem;">
         <div class="kpi-card" style="border-left: 4px solid var(--accent); cursor:pointer;" onclick="EncargosModule.setFilter('hoy')">
-          <span class="kpi-icon">⚡</span>
-          <div>
+          <div class="kpi-header">
+            <span class="kpi-label">Para Hoy</span>
+            <span class="kpi-icon">⚡</span>
+          </div>
+          <div class="kpi-body">
             <div class="kpi-value" id="kpi-hoy">0</div>
-            <div class="kpi-label">Para Hoy</div>
           </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid var(--amber); cursor:pointer;" onclick="EncargosModule.setFilter('alerta')">
-          <span class="kpi-icon">🟡</span>
-          <div>
+          <div class="kpi-header">
+            <span class="kpi-label">En Alerta / Próximos</span>
+            <span class="kpi-icon">🟡</span>
+          </div>
+          <div class="kpi-body">
             <div class="kpi-value" id="kpi-alerta">0</div>
-            <div class="kpi-label">En Alerta / Próximos</div>
           </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid var(--red); cursor:pointer;" onclick="EncargosModule.setFilter('demorado')">
-          <span class="kpi-icon">🔴</span>
-          <div>
+          <div class="kpi-header">
+            <span class="kpi-label">Demorados / Vencidos</span>
+            <span class="kpi-icon">🔴</span>
+          </div>
+          <div class="kpi-body">
             <div class="kpi-value" id="kpi-demorados">0</div>
-            <div class="kpi-label">Demorados / Vencidos</div>
           </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid var(--green); cursor:pointer;" onclick="EncargosModule.setFilter('completado')">
-          <span class="kpi-icon">✅</span>
-          <div>
+          <div class="kpi-header">
+            <span class="kpi-label">Completados</span>
+            <span class="kpi-icon">✅</span>
+          </div>
+          <div class="kpi-body">
             <div class="kpi-value" id="kpi-completados">0</div>
-            <div class="kpi-label">Completados</div>
           </div>
         </div>
       </div>

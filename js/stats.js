@@ -58,44 +58,58 @@ const StatsModule = {
         </div>
       </div>
 
-      <div class="kpi-row" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 1.25rem;">
+      <div class="kpi-row stats-kpi-grid">
         <div class="kpi-card">
-          <div class="kpi-icon">💰</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Ventas Brutas</span>
+            <div class="kpi-icon" aria-hidden="true">💰</div>
+          </div>
           <div class="kpi-body">
-            <div class="kpi-value">${Utils.currency(s.monthlyTotal || 0)}</div>
-            <div class="kpi-label">Ventas Brutas</div>
+            <div class="kpi-value" title="${Utils.currency(s.monthlyTotal || 0)}">${Utils.currency(s.monthlyTotal || 0)}</div>
             <div class="kpi-sub">${s.monthlyCount || 0} ventas en el mes</div>
           </div>
         </div>
+
         <div class="kpi-card">
-          <div class="kpi-icon">🧾</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Total Facturado</span>
+            <div class="kpi-icon" aria-hidden="true">🧾</div>
+          </div>
           <div class="kpi-body">
-            <div class="kpi-value" style="color:#8b5cf6">${Utils.currency(s.invoicedTotal || 0)}</div>
-            <div class="kpi-label">Total Facturado</div>
+            <div class="kpi-value" style="color:#8b5cf6" title="${Utils.currency(s.invoicedTotal || 0)}">${Utils.currency(s.invoicedTotal || 0)}</div>
             <div class="kpi-sub">Ventas con factura</div>
           </div>
         </div>
+
         <div class="kpi-card">
-          <div class="kpi-icon">📈</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Ganancia (S-C)</span>
+            <div class="kpi-icon" aria-hidden="true">📈</div>
+          </div>
           <div class="kpi-body">
-            <div class="kpi-value text-success">${Utils.currency(s.grossProfit || 0)}</div>
-            <div class="kpi-label">Ganancia (S-C)</div>
+            <div class="kpi-value text-success" title="${Utils.currency(s.grossProfit || 0)}">${Utils.currency(s.grossProfit || 0)}</div>
             <div class="kpi-sub">Ventas menos Costos</div>
           </div>
         </div>
+
         <div class="kpi-card">
-          <div class="kpi-icon">💸</div>
+          <div class="kpi-header">
+            <span class="kpi-label">Gastos Mensuales</span>
+            <div class="kpi-icon" aria-hidden="true">💸</div>
+          </div>
           <div class="kpi-body">
-            <div class="kpi-value text-danger">${Utils.currency(s.totalExpenses || 0)}</div>
-            <div class="kpi-label">Gastos Mensuales</div>
+            <div class="kpi-value text-danger" title="${Utils.currency(s.totalExpenses || 0)}">${Utils.currency(s.totalExpenses || 0)}</div>
             <div class="kpi-sub">Gastos externos registrados</div>
           </div>
         </div>
+
         <div class="kpi-card" style="border-color: var(--accent); background: var(--accent-glow)">
-          <div class="kpi-icon">🏆</div>
+          <div class="kpi-header">
+            <span class="kpi-label" style="color: var(--accent)">Ganancia Neta</span>
+            <div class="kpi-icon" aria-hidden="true">🏆</div>
+          </div>
           <div class="kpi-body">
-            <div class="kpi-value">${Utils.currency(s.netProfit || 0)}</div>
-            <div class="kpi-label" style="color: var(--accent)">GANANCIA NETA</div>
+            <div class="kpi-value" title="${Utils.currency(s.netProfit || 0)}">${Utils.currency(s.netProfit || 0)}</div>
             <div class="kpi-sub" style="color: var(--accent-dim)">Margen final del mes</div>
           </div>
         </div>
