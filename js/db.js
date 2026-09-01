@@ -113,7 +113,26 @@ const DB = {
       discount_type: it.discountType || 'none', discount_value: parseFloat(it.discountValue) || 0,
       admin_id: this._adminId()
     }));
-    await this.client.from('sale_items').insert(itemsToInsert);
+    const { error: insError } = await this.client.from('sale_items').insert(itemsToInsert);
+    if (insError) {
+      console.warn("Fallo inserción primaria de sale_items con decimales, aplicando fallback:", insError);
+      const fallbackItems = items.map(it => {
+        const qty = parseFloat(it.quantity) || 1;
+        const isDecimal = !Number.isInteger(qty);
+        const unitAbbr = (typeof Utils !== 'undefined' && Utils.unitAbbr) ? Utils.unitAbbr(it.unit) : (it.unit || '');
+        return {
+          sale_id: saleId,
+          product_id: it.productId || null,
+          product_name: isDecimal ? `${it.productName} (${qty} ${unitAbbr})` : it.productName,
+          quantity: isDecimal ? 1 : Math.round(qty),
+          unit_price: isDecimal ? Math.round((parseFloat(it.unitPrice || 0) * qty) * 100) / 100 : parseFloat(it.unitPrice) || 0,
+          discount_type: it.discountType || 'none',
+          discount_value: parseFloat(it.discountValue) || 0,
+          admin_id: this._adminId()
+        };
+      });
+      await this.client.from('sale_items').insert(fallbackItems);
+    }
 
     for (const it of items) { 
       if (it.productId) {
@@ -191,11 +210,19 @@ const DB = {
     return data || [];
   },
   async saveDeduction(ded) {
-    await this.client.from('supply_deductions').insert({
-      supply_id: ded.productId, supply_name: ded.productName, quantity: ded.quantity,
+    const qty = parseFloat(ded.quantity) || 0;
+    const { error } = await this.client.from('supply_deductions').insert({
+      supply_id: ded.productId, supply_name: ded.productName, quantity: qty,
       reason: ded.reason, admin_id: this._adminId()
     });
-    await this.adjustSupplyStock(ded.productId, -ded.quantity);
+    if (error) {
+      console.warn("Fallo inserción primaria de supply_deductions con decimales, aplicando fallback:", error);
+      await this.client.from('supply_deductions').insert({
+        supply_id: ded.productId, supply_name: ded.productName, quantity: Math.max(1, Math.round(qty)),
+        reason: `${ded.reason} (${qty})`, admin_id: this._adminId()
+      });
+    }
+    await this.adjustSupplyStock(ded.productId, -qty);
   },
 
   /* ── EXPENSES ── */

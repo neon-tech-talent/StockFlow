@@ -234,3 +234,13 @@ INSERT INTO admin_modules (admin_id, module_key, enabled)
 SELECT id, 'turnos', true
 FROM admin_users WHERE username = 'guaja'
 ON CONFLICT (admin_id, module_key) DO NOTHING;
+
+-- 11. CANTIDADES DECIMALES PARA VENTA Y DEDUCCIONES POR KG Y LITROS
+DO $$
+BEGIN
+  ALTER TABLE sale_items ALTER COLUMN quantity TYPE numeric(12,3);
+  ALTER TABLE supply_deductions ALTER COLUMN quantity TYPE numeric(12,3);
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END$$;
+

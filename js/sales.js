@@ -109,7 +109,7 @@ const SalesModule = {
       <table class="data-table" style="margin-top:1.5rem">
         <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr></thead>
         <tbody>
-          ${items.map(it => {
+          ${items.length ? items.map(it => {
             let subtotal = it.quantity * (parseFloat(it.unit_price) || 0);
             let discountInfo = '';
             if (it.discount_type === 'percentage') {
@@ -126,7 +126,7 @@ const SalesModule = {
               <td>${Utils.currency(it.unit_price)}</td>
               <td>${Utils.currency(Math.max(0, subtotal))}</td>
             </tr>`;
-          }).join('')}
+          }).join('') : '<tr><td colspan="4" class="empty-state" style="padding:1.25rem 0.5rem;">No se registraron ítems detallados para esta venta.</td></tr>'}
         </tbody>
         <tfoot><tr><td colspan="3" style="text-align:right"><strong>Total:</strong></td><td><strong>${Utils.currency(s.total)}</strong></td></tr></tfoot>
       </table>

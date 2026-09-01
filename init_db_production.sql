@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.supply_deductions (
   admin_id UUID REFERENCES admin_users(id) ON DELETE CASCADE,
   supply_id UUID REFERENCES public.supplies(id) ON DELETE CASCADE,
   supply_name TEXT NOT NULL,
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC(12,3) NOT NULL,
   reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS public.sale_items (
   sale_id UUID REFERENCES public.sales(id) ON DELETE CASCADE,
   product_id UUID REFERENCES public.products(id) ON DELETE SET NULL,
   product_name TEXT NOT NULL,
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC(12,3) NOT NULL,
   unit_price NUMERIC(10,2) NOT NULL,
   discount_type TEXT NOT NULL DEFAULT 'none',
   discount_value NUMERIC DEFAULT 0
