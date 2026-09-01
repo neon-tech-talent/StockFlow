@@ -127,8 +127,9 @@ const StockModule = {
           <div class="form-group"><label>Unidad de Medida *</label>
             <select name="unit" class="form-input" required>
               <option value="Unidades" ${(!s || !s.unit || s.unit === 'Unidades' || s.unit === 'unidades') ? 'selected' : ''}>Unidades</option>
-              <option value="Gramos" ${(s?.unit === 'Gramos' || s?.unit === 'gramos') ? 'selected' : ''}>Gramos</option>
+              <option value="Kg" ${(s?.unit === 'Kg' || s?.unit === 'kg' || s?.unit === 'Kilos' || s?.unit === 'kilos' || s?.unit === 'Gramos' || s?.unit === 'gramos') ? 'selected' : ''}>Kg (Kilogramos)</option>
               <option value="Litros" ${(s?.unit === 'Litros' || s?.unit === 'litros') ? 'selected' : ''}>Litros</option>
+              <option value="Metros" ${(s?.unit === 'Metros' || s?.unit === 'metros') ? 'selected' : ''}>Metros</option>
             </select>
           </div>
         </div>
@@ -260,7 +261,7 @@ const StockModule = {
           ${rows.map(p => {
             const cat = cats.find(c => c.id === p.category_id);
             return `<tr><td><strong>${Utils.escHtml(p.name)}</strong></td><td>${cat?Utils.escHtml(cat.name):'-'}</td><td>${Utils.currency(p.sell_price)}</td><td>${Utils.currency(p.cost_price)}</td>
-            <td><span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}">${p.stock} ${Utils.escHtml(p.unit || 'Unidades')}</span></td>
+            <td><span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}">${p.stock} ${Utils.escHtml(Utils.unitAbbr(p.unit))}</span></td>
             <td><button class="btn-icon" aria-label="Editar ${Utils.escHtml(p.name)}" onclick="StockModule.openProductModal('${p.id}')">✏️</button><button class="btn-icon danger" aria-label="Eliminar ${Utils.escHtml(p.name)}" onclick="StockModule.delProduct('${p.id}')">🗑️</button></td></tr>`;
           }).join('')}</tbody></table></div>`;
     },
@@ -289,9 +290,11 @@ const StockModule = {
             <input name="stock" type="number" step="any" min="0" class="form-input" required value="${p?.stock ?? ''}"></div>
           <div class="form-group"><label>Unidad de Medida *</label>
             <select name="unit" class="form-input" required>
-              <option value="Unidades" ${(!p || !p.unit || p.unit === 'Unidades') ? 'selected' : ''}>Unidades</option>
-              <option value="Gramos" ${p?.unit === 'Gramos' ? 'selected' : ''}>Gramos</option>
-              <option value="Litros" ${p?.unit === 'Litros' ? 'selected' : ''}>Litros</option>
+              <option value="Unidades" ${(!p || !p.unit || p.unit === 'Unidades' || p.unit === 'unidades') ? 'selected' : ''}>Unidades</option>
+              <option value="Kg" ${(p?.unit === 'Kg' || p?.unit === 'kg' || p?.unit === 'Kilos' || p?.unit === 'kilos' || p?.unit === 'Gramos' || p?.unit === 'gramos') ? 'selected' : ''}>Kg (Kilogramos)</option>
+              <option value="Litros" ${(p?.unit === 'Litros' || p?.unit === 'litros') ? 'selected' : ''}>Litros</option>
+              <option value="Metros" ${(p?.unit === 'Metros' || p?.unit === 'metros') ? 'selected' : ''}>Metros</option>
+              <option value="Porción" ${(p?.unit === 'Porción' || p?.unit === 'porcion') ? 'selected' : ''}>Porción</option>
             </select></div>
         </div>
         <div class="modal-actions">

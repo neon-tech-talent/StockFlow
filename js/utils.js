@@ -98,6 +98,25 @@ const Utils = {
     skeleton(rows = 4) {
         return `<div class="skeleton-container" aria-label="Cargando contenido">${Array.from({ length: rows }, () => `<div class="skeleton-row"></div>`).join('')}</div>`;
     },
+    unitAbbr(u) {
+        if (!u) return 'u.';
+        const lower = String(u).toLowerCase().trim();
+        if (lower === 'kg' || lower === 'kilos' || lower === 'kilogramos' || lower === 'gramos' || lower === 'gr' || lower === 'g') return 'kg';
+        if (lower === 'litros' || lower === 'litro' || lower === 'lts' || lower === 'l') return 'L';
+        if (lower === 'metros' || lower === 'metro' || lower === 'm') return 'm';
+        if (lower === 'unidades' || lower === 'unidad' || lower === 'un' || lower === 'uds') return 'u.';
+        if (lower === 'porción' || lower === 'porcion') return 'porc.';
+        return u;
+    },
+
+    unitStep(u) {
+        if (!u) return 1;
+        const lower = String(u).toLowerCase().trim();
+        if (lower === 'kg' || lower === 'kilos' || lower === 'kilogramos' || lower === 'gramos' || lower === 'gr' || lower === 'g') return 0.1;
+        if (lower === 'litros' || lower === 'litro' || lower === 'lts' || lower === 'l') return 0.1;
+        return 1;
+    },
+
     emptyState(icon = '📦', message = 'No hay registros disponibles', subtext = '') {
         return `<div class="empty-state">
             <span class="empty-state-icon" role="img" aria-hidden="true">${icon}</span>

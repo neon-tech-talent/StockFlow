@@ -216,8 +216,9 @@ const SalesModule = {
 
         el.innerHTML = list.map(p => {
             const hasStock = p.stock > 0;
+            const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(p.unit) : (p.unit || 'u.');
             const stockDisplay = hasStock 
-                ? `<span class="prod-chip-stock">Stock: <strong>${p.stock}</strong> ${Utils.escHtml(p.unit || 'u.')}</span>`
+                ? `<span class="prod-chip-stock">Stock: <strong>${p.stock}</strong> ${Utils.escHtml(unitAbbr)}</span>`
                 : `<span class="badge badge-danger" style="font-size:0.7rem;">Sin Stock</span>`;
 
             return `
@@ -239,9 +240,11 @@ const SalesModule = {
         const exist = this.cart.find(x => x.productId === id);
 
         // Determinación de cantidad de incremento según la unidad
+        const step = Utils.unitStep ? Utils.unitStep(unit) : 1;
         let delta = 1;
-        if (unit === 'Litros') delta = stock < 1 ? Math.min(0.5, stock) : 1;
-        else if (unit === 'Gramos') delta = stock < 100 ? (stock > 0 ? stock : 1) : 100;
+        if (step < 1) {
+            delta = exist ? step : (stock < 1 ? Math.min(step, stock) : 1);
+        }
         
         if (exist) {
             const nextQty = Math.round((exist.quantity + delta) * 1000) / 1000;
@@ -334,8 +337,8 @@ const SalesModule = {
         if (totalEl) totalEl.textContent = Utils.currency(total);
         if (!this.cart.length) { el.innerHTML = Utils.emptyState('🛒', 'El carrito está vacío', 'Haz clic en un producto para agregarlo'); return; }
         el.innerHTML = `<div class="cart-list">${this.cart.map((it, i) => {
-            const step = (it.unit === 'Litros') ? 0.5 : (it.unit === 'Gramos') ? 100 : 1;
-            const unitAbbr = (it.unit === 'Litros') ? 'L' : (it.unit === 'Gramos') ? 'gr' : 'u.';
+            const step = Utils.unitStep ? Utils.unitStep(it.unit) : 1;
+            const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(it.unit) : 'u.';
             return `
       <div class="cart-item-card">
         <div class="cart-item-header">
@@ -522,7 +525,7 @@ const SalesModule = {
           </div>
           <div class="form-group">
             <label>Stock Inicial *</label>
-            <input id="exp-stock" name="stock" type="number" step="1" min="1" value="1" class="form-input" required placeholder="1">
+            <input id="exp-stock" name="stock" type="number" step="any" min="0.001" value="1" class="form-input" required placeholder="1 o 0.5">
           </div>
         </div>
         <div class="form-row">
@@ -537,8 +540,7 @@ const SalesModule = {
             <label>Unidad de Medida</label>
             <select id="exp-unit" name="unit" class="form-input">
               <option value="Unidades" selected>Unidades</option>
-              <option value="Kg">Kg</option>
-              <option value="Gramos">Gramos</option>
+              <option value="Kg">Kg (Kilogramos)</option>
               <option value="Litros">Litros</option>
               <option value="Metros">Metros</option>
               <option value="Porción">Porción</option>
@@ -551,7 +553,7 @@ const SalesModule = {
         </div>
         <div style="background:var(--accent-subtle); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.65rem 0.85rem; margin-bottom:1.25rem; display:flex; align-items:center; gap:0.5rem;">
           <span>🛒</span>
-          <small style="color:var(--accent-light); font-weight:600;">Se agregará 1 unidad automáticamente al carrito de venta actual.</small>
+          <small style="color:var(--accent-light); font-weight:600;">Se agregará automáticamente al carrito de venta actual.</small>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
@@ -614,8 +616,8 @@ const SalesModule = {
       </div>
       <form onsubmit="SalesModule.saveQuickStock(event, '${productId}', '${Utils.escHtml(productName)}')">
         <div class="form-group">
-          <label>Cantidad de Unidades a Ingresar *</label>
-          <input id="qs-qty" name="qty" type="number" step="1" min="1" value="10" class="form-input" required autofocus placeholder="Ej: 10">
+          <label>Cantidad a Ingresar *</label>
+          <input id="qs-qty" name="qty" type="number" step="any" min="0.001" value="10" class="form-input" required autofocus placeholder="Ej: 10 o 2.5">
         </div>
         <div style="margin: 1.1rem 0; display:flex; align-items:center; gap:0.5rem; background:rgba(0,0,0,0.2); padding:0.6rem 0.8rem; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
           <input type="checkbox" id="qs-add-cart" name="add_to_cart" checked style="width:1.15rem; height:1.15rem; cursor:pointer;">

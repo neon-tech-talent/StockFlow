@@ -556,13 +556,14 @@ const EncargosModule = {
 
         dropdown.innerHTML = this._filteredProducts.slice(0, 30).map((p, idx) => {
             const isHighlighted = idx === this._highlightedIndex;
+            const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(p.unit) : (p.unit || 'u.');
             return `
               <div class="encargo-prod-item ${isHighlighted ? 'focused' : ''}" 
                    id="prod-item-${idx}"
                    onmousedown="event.preventDefault(); EncargosModule.selectProduct('${p.id}')">
                 <div>
                   <div class="encargo-prod-item-name">${Utils.escHtml(p.name)}</div>
-                  <div class="encargo-prod-item-stock">Stock: <strong>${p.stock ?? 0}</strong> ${Utils.escHtml(p.unit || 'u.')}</div>
+                  <div class="encargo-prod-item-stock">Stock: <strong>${p.stock ?? 0}</strong> ${Utils.escHtml(unitAbbr)}</div>
                 </div>
                 <div class="encargo-prod-item-meta">
                   <span class="encargo-prod-item-price">${Utils.currency(p.sell_price)}</span>
@@ -632,7 +633,8 @@ const EncargosModule = {
         if (searchInput) searchInput.value = prod.name;
         if (clearBtn) clearBtn.style.display = 'flex';
         if (dropdown) dropdown.classList.remove('active');
-        if (unitLabel) unitLabel.textContent = prod.unit || 'u.';
+        const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(prod.unit) : (prod.unit || 'u.');
+        if (unitLabel) unitLabel.textContent = unitAbbr;
 
         this._updateSelectedPreview();
 
@@ -652,9 +654,10 @@ const EncargosModule = {
         }
 
         const p = this._selectedProduct;
+        const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(p.unit) : (p.unit || 'u.');
         preview.innerHTML = `
           <div class="encargo-selected-badge">
-            <span>✅ <strong>${Utils.escHtml(p.name)}</strong> (${Utils.currency(p.sell_price)}) • Stock: ${p.stock ?? 0} ${Utils.escHtml(p.unit || 'u.')}</span>
+            <span>✅ <strong>${Utils.escHtml(p.name)}</strong> (${Utils.currency(p.sell_price)}) • Stock: ${p.stock ?? 0} ${Utils.escHtml(unitAbbr)}</span>
             <button type="button" onclick="EncargosModule.clearSelectedProduct()" style="background:none; border:none; color:inherit; cursor:pointer; font-size:0.8rem; padding:0 0.2rem;" title="Quitar selección">✕</button>
           </div>`;
     },
@@ -707,22 +710,25 @@ const EncargosModule = {
         const prodId = prod.id;
         const name = prod.name;
         const price = parseFloat(prod.sell_price) || 0;
+        const unit = prod.unit || 'Unidades';
 
         const exist = this._cart.find(x => x.productId === prodId);
         if (exist) {
             exist.quantity = Math.round((exist.quantity + qty) * 1000) / 1000;
-            exist.subtotal = exist.quantity * exist.unitPrice;
+            exist.subtotal = Math.round(exist.quantity * exist.unitPrice * 100) / 100;
         } else {
             this._cart.push({
                 productId: prodId,
                 productName: name,
                 unitPrice: price,
                 quantity: qty,
-                subtotal: price * qty
+                unit: unit,
+                subtotal: Math.round(price * qty * 100) / 100
             });
         }
 
-        if (typeof Toast !== 'undefined') Toast.show(`Agregado: ${qty}x ${name}`, 'info', 1200);
+        const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(unit) : 'u.';
+        if (typeof Toast !== 'undefined') Toast.show(`Agregado: ${qty} ${unitAbbr} de ${name}`, 'info', 1200);
 
         this.clearSelectedProduct();
         if (qtyInput) qtyInput.value = '1';
@@ -749,18 +755,20 @@ const EncargosModule = {
             return;
         }
 
-        box.innerHTML = this._cart.map((it, i) => `
+        box.innerHTML = this._cart.map((it, i) => {
+          const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(it.unit) : (it.unit || 'u.');
+          return `
           <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:0.45rem 0.75rem; border-radius:var(--radius-xs); border:1px solid var(--border-subtle);">
             <div>
-              <strong>${it.quantity}x</strong> ${Utils.escHtml(it.productName)} 
+              <strong>${it.quantity} ${Utils.escHtml(unitAbbr)}</strong> ${Utils.escHtml(it.productName)} 
               <small class="text-muted">(${Utils.currency(it.unitPrice)} c/u)</small>
             </div>
             <div style="display:flex; align-items:center; gap:0.5rem;">
               <strong style="color:var(--accent); font-size:0.95rem;">${Utils.currency(it.subtotal)}</strong>
               <button type="button" class="btn-icon danger" style="min-width:26px; min-height:26px; font-size:0.75rem;" onclick="EncargosModule.removeItemFromCart(${i})">✕</button>
             </div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
     },
 
     updateCartTotals() {
