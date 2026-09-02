@@ -204,16 +204,17 @@ const StockModule = {
     },
 
     async openExpenseModal() {
+        const todayStr = Utils.todayStr();
         Modal.open(`
       <h2 class="modal-title">Cargar Gasto Externo</h2>
       <form onsubmit="StockModule.saveExpense(event)">
         <div class="form-group"><label>Concepto del Gasto *</label>
-          <input name="concept" class="form-input" placeholder="Ej: Alquiler, Luz" required></div>
+          <input name="concept" class="form-input" placeholder="Ej: Alquiler, Luz, Impuestos" required></div>
         <div class="form-row">
-          <div class="form-group"><label>Monto *</label>
-            <input name="amount" type="number" step="0.01" min="0" class="form-input" required></div>
-          <div class="form-group"><label>Fecha *</label>
-            <input name="date" type="date" class="form-input" required value="${new Date().toISOString().split('T')[0]}"></div>
+          <div class="form-group"><label>Monto ($) *</label>
+            <input name="amount" type="number" step="0.01" min="0.01" class="form-input" placeholder="0.00" required></div>
+          <div class="form-group"><label>Fecha del Gasto *</label>
+            <input name="date" type="date" class="form-input" required max="${todayStr}" value="${todayStr}"></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
@@ -225,7 +226,23 @@ const StockModule = {
     async saveExpense(e) {
         e.preventDefault();
         const f = e.target;
-        await DB.saveExpense({ concept: f.concept.value.trim(), amount: parseFloat(f.amount.value), date: f.date.value });
+        const concept = f.concept.value.trim();
+        const amount = parseFloat(f.amount.value) || 0;
+        const date = f.date.value;
+        const todayStr = Utils.todayStr();
+
+        if (date > todayStr) {
+            if (typeof Toast !== 'undefined') Toast.show('No se pueden registrar gastos con fecha futura.', 'warning');
+            else alert('No se pueden registrar gastos con fecha futura.');
+            return;
+        }
+
+        if (amount <= 0) {
+            if (typeof Toast !== 'undefined') Toast.show('El monto del gasto debe ser mayor a 0.', 'warning');
+            return;
+        }
+
+        await DB.saveExpense({ concept, amount, date });
         Modal.close();
         if (typeof Toast !== 'undefined') Toast.show('Gasto registrado con éxito', 'success');
         await this._renderActiveTab();

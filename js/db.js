@@ -231,6 +231,10 @@ const DB = {
     return data || [];
   },
   async saveExpense(e) {
+    const todayStr = (typeof Utils !== 'undefined' && Utils.todayStr) ? Utils.todayStr() : new Date().toISOString().split('T')[0];
+    if (e.date && e.date > todayStr) {
+      throw new Error("No se pueden registrar gastos con fecha futura.");
+    }
     const obj = { concept: e.concept, amount: e.amount, date: e.date };
     if (e.id) await this.client.from('expenses').update(obj).eq('id', e.id).eq('admin_id', this._adminId());
     else await this.client.from('expenses').insert({ ...obj, admin_id: this._adminId() });
