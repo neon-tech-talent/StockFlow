@@ -199,6 +199,22 @@
     }
     .error-msg.visible { display: flex; }
 
+    /* Inactivity / Info Message */
+    .info-msg {
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid rgba(212, 175, 55, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 0.8rem 1rem;
+      font-size: 0.86rem;
+      color: var(--accent-light);
+      margin-bottom: 1.25rem;
+      display: none;
+      align-items: center;
+      gap: 0.65rem;
+      line-height: 1.35;
+    }
+    .info-msg.visible { display: flex; }
+
     /* Footer */
     .login-footer {
       text-align: center;
@@ -224,6 +240,13 @@
 
     <div class="login-card" id="login-card">
       <h2>Iniciá sesión para continuar</h2>
+      
+      <!-- Mensaje de Cierre por Inactividad -->
+      <div class="info-msg" id="inactivity-msg">
+        <span style="font-size:1.3rem;">⏰</span>
+        <span>Tu sesión se cerró automáticamente por inactividad (más de 10 minutos sin actividad).</span>
+      </div>
+
       <div class="error-msg" id="error-msg">
         <span>⚠️</span>
         <span id="error-text">Usuario o contraseña incorrectos.</span>
@@ -246,10 +269,19 @@
   </div>
 
   <script>
-    // Si ya hay sesión, redirigir directo
+    // Si se cerró por inactividad, mostrar mensaje
     (function() {
-      const s = Auth.getSession();
-      if (s) window.location.href = 'index.html';
+      const urlParams = new URLSearchParams(window.location.search);
+      const isInactive = (urlParams.get('reason') === 'inactivity') || (sessionStorage.getItem('flowstock_logout_reason') === 'inactivity');
+      if (isInactive) {
+        sessionStorage.removeItem('flowstock_logout_reason');
+        const inactEl = document.getElementById('inactivity-msg');
+        if (inactEl) inactEl.classList.add('visible');
+      } else {
+        // Si no es por inactividad y ya hay sesión activa, redirigir directo
+        const s = Auth.getSession();
+        if (s) window.location.href = 'index.html';
+      }
     })();
 
     // Animación de entrada suave con Anime.js
