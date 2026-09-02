@@ -395,8 +395,9 @@ const TurnosModule = {
     const allAppts = await this._getFilteredAppointments();
     const isFilterActive = !!(this._selectedProfId || this._selectedFilterClientId || this._searchQuery || (this._statusFilter && this._statusFilter !== 'activos'));
     
-    // Al filtrar por cualquier valor, mostrar directamente todos los resultados debajo del calendario
-    const showAllFiltered = isFilterActive || (this._filterMode === 'all_filtered');
+    // Si filterMode es 'all_filtered', mostrar todos los turnos que coinciden con los filtros a lo largo de las fechas.
+    // Si filterMode es 'day', filtrar también por el día seleccionado en el calendario.
+    const showAllFiltered = (this._filterMode === 'all_filtered');
     
     let targetAppts = showAllFiltered 
       ? [...allAppts] 
@@ -438,16 +439,19 @@ const TurnosModule = {
           <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); font-weight:800;">
             ${showAllFiltered 
               ? `🔍 Turnos Filtrados ${filterDescription} (${targetAppts.length})` 
-              : `📅 Turnos del ${dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)} ${isToday ? '<span class="badge badge-success" style="font-size:0.75rem; margin-left:0.4rem;">HOY</span>' : ''}`}
+              : `📅 Turnos del ${dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)} ${filterDescription ? `<span style="font-weight:600; font-size:0.95rem; color:var(--accent); margin-left:0.35rem;">[${filterDescription}]</span>` : ''} ${isToday ? '<span class="badge badge-success" style="font-size:0.75rem; margin-left:0.4rem;">HOY</span>' : ''}`}
           </h3>
           <small class="text-muted">
             ${showAllFiltered 
               ? `Mostrando todos los turnos que coinciden con los filtros seleccionados (${targetAppts.length} ${targetAppts.length === 1 ? 'turno' : 'turnos'})` 
-              : `${targetAppts.length} ${targetAppts.length === 1 ? 'turno agendado' : 'turnos agendados'} para este día`}
+              : `${targetAppts.length} ${targetAppts.length === 1 ? 'turno agendado' : 'turnos agendados'} para este día ${isFilterActive ? 'con los filtros aplicados' : ''}`}
           </small>
         </div>
         <div class="btn-row" style="gap:0.5rem; flex-wrap:wrap;">
           ${isFilterActive ? `
+            <button class="btn btn-sm ${showAllFiltered ? 'btn-outline' : 'btn-primary'}" onclick="TurnosModule.setFilterMode('${showAllFiltered ? 'day' : 'all_filtered'}')">
+              ${showAllFiltered ? `📅 Ver solo día seleccionado (${this._selectedDate})` : `📋 Ver todos los filtrados (${allAppts.length})`}
+            </button>
             <button class="btn btn-sm btn-outline" style="color:var(--accent); border-color:var(--border);" onclick="TurnosModule.clearFilters()">
               🧹 Limpiar Filtros
             </button>
