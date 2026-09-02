@@ -354,11 +354,11 @@ const EncargosModule = {
           <div class="form-row">
             <div class="form-group" style="margin:0;">
               <label>Nombre del Cliente *</label>
-              <input id="no-client-name" name="client_name" class="form-input" required value="${Utils.escHtml(existingOrder?.client_name || '')}" placeholder="Nombre completo" oninput="EncargosModule.onClientTyped()">
+              <input id="no-client-name" name="client_name" class="form-input" required value="${Utils.escHtml(existingOrder?.client_name || '')}" placeholder="Nombre completo" oninput="this.value = this.value.replace(/[0-9]/g, ''); EncargosModule.onClientTyped()">
             </div>
             <div class="form-group" style="margin:0;">
               <label>Teléfono / WhatsApp</label>
-              <input id="no-client-phone" name="client_phone" class="form-input" value="${Utils.escHtml(existingOrder?.client_phone || '')}" placeholder="Ej: 11 2345-6789">
+              <input id="no-client-phone" name="client_phone" class="form-input" value="${Utils.escHtml(existingOrder?.client_phone || '')}" placeholder="Ej: 11 2345-6789" oninput="this.value = this.value.replace(/[^0-9+\-\s()]/g, '')">
             </div>
           </div>
           <div class="form-group" style="margin-top:0.75rem; margin-bottom:0.5rem;">
@@ -802,6 +802,21 @@ const EncargosModule = {
         const clientName = f.client_name.value.trim();
         const clientPhone = f.client_phone.value.trim();
         const clientAddress = f.client_address.value.trim();
+
+        const nameVal = Utils.validatePersonName(clientName, 'nombre del cliente');
+        if (!nameVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(nameVal.message, 'warning');
+            else alert(nameVal.message);
+            return;
+        }
+
+        const phoneVal = Utils.validatePhone(clientPhone);
+        if (!phoneVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(phoneVal.message, 'warning');
+            else alert(phoneVal.message);
+            return;
+        }
+
         const deliveryDatetime = f.delivery_datetime.value;
         const alertLeadMinutes = parseInt(f.alert_lead_minutes.value) || 60;
         const depositAmount = parseFloat(f.deposit_amount.value) || 0;

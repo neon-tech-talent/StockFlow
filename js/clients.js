@@ -105,10 +105,19 @@ const ClientsModule = {
         Modal.open(`
       <h2 class="modal-title">${c ? 'Editar' : 'Nuevo'} Cliente</h2>
       <form onsubmit="ClientsModule.save(event,'${id || ''}')">
-        <div class="form-group"><label>Nombre Completo *</label><input name="name" class="form-input" required value="${Utils.escHtml(c?.name || '')}"></div>
+        <div class="form-group">
+          <label>Nombre Completo *</label>
+          <input name="name" class="form-input" required value="${Utils.escHtml(c?.name || '')}" placeholder="Ej: Juan Pérez" oninput="this.value = this.value.replace(/[0-9]/g, '')">
+        </div>
         <div class="form-row">
-          <div class="form-group"><label>DNI</label><input name="dni" class="form-input" value="${Utils.escHtml(c?.dni || '')}"></div>
-          <div class="form-group"><label>Teléfono</label><input name="phone" class="form-input" value="${Utils.escHtml(c?.phone || '')}"></div>
+          <div class="form-group">
+            <label>DNI</label>
+            <input name="dni" class="form-input" value="${Utils.escHtml(c?.dni || '')}" placeholder="Ej: 38123456" oninput="this.value = this.value.replace(/[^0-9.]/g, '')">
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input name="phone" class="form-input" value="${Utils.escHtml(c?.phone || '')}" placeholder="Ej: 11 2345-6789" oninput="this.value = this.value.replace(/[^0-9+\-\s()]/g, '')">
+          </div>
         </div>
         <div class="form-group"><label>Dirección</label><input name="address" class="form-input" value="${Utils.escHtml(c?.address || '')}"></div>
         <div class="form-group"><label>Email</label><input name="email" type="email" class="form-input" value="${Utils.escHtml(c?.email || '')}"></div>
@@ -120,12 +129,39 @@ const ClientsModule = {
     },
 
     async save(e, id) {
-        e.preventDefault(); const f = e.target;
+        e.preventDefault(); 
+        const f = e.target;
+        const name = f.name.value.trim();
+        const dni = f.dni.value.trim();
+        const phone = f.phone.value.trim();
+
+        // Validaciones de negocio
+        const nameVal = Utils.validatePersonName(name, 'nombre del cliente');
+        if (!nameVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(nameVal.message, 'warning');
+            else alert(nameVal.message);
+            return;
+        }
+
+        const dniVal = Utils.validateDni(dni);
+        if (!dniVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(dniVal.message, 'warning');
+            else alert(dniVal.message);
+            return;
+        }
+
+        const phoneVal = Utils.validatePhone(phone);
+        if (!phoneVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(phoneVal.message, 'warning');
+            else alert(phoneVal.message);
+            return;
+        }
+
         await DB.saveClient({ 
             id: id || undefined, 
-            name: f.name.value.trim(), 
-            dni: f.dni.value.trim(),
-            phone: f.phone.value.trim(), 
+            name: name, 
+            dni: dni,
+            phone: phone, 
             address: f.address.value.trim(),
             email: f.email.value.trim() 
         });

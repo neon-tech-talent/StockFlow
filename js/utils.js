@@ -125,6 +125,41 @@ const Utils = {
         </div>`;
     },
 
+    /* ── VALIDACIONES DE CAMPOS ── */
+    validatePersonName(name, fieldName = 'nombre') {
+        if (!name || typeof name !== 'string') return { valid: false, message: `El ${fieldName} es obligatorio.` };
+        const trimmed = name.trim();
+        if (trimmed.length < 2) return { valid: false, message: `El ${fieldName} debe tener al menos 2 caracteres.` };
+        if (/[0-9]/.test(trimmed)) return { valid: false, message: `El ${fieldName} no puede contener números.` };
+        return { valid: true };
+    },
+
+    validatePhone(phone) {
+        if (!phone) return { valid: true };
+        const trimmed = String(phone).trim();
+        if (!trimmed) return { valid: true };
+        if (/[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]/.test(trimmed)) {
+            return { valid: false, message: 'El teléfono no puede contener letras.' };
+        }
+        if (!/^[0-9+\-\s()./]+$/.test(trimmed)) {
+            return { valid: false, message: 'El teléfono solo debe contener números y signos (+, -).' };
+        }
+        return { valid: true };
+    },
+
+    validateDni(dni) {
+        if (!dni) return { valid: true };
+        const trimmed = String(dni).trim();
+        if (!trimmed) return { valid: true };
+        if (/[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]/.test(trimmed)) {
+            return { valid: false, message: 'El DNI no puede contener letras.' };
+        }
+        if (!/^[0-9.]+$/.test(trimmed)) {
+            return { valid: false, message: 'El DNI solo debe contener números.' };
+        }
+        return { valid: true };
+    },
+
     /* ── ANIME.JS MICRO-INTERACTION HELPERS ── */
     animatePage(container) {
         if (!container || typeof anime === 'undefined') return;

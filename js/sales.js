@@ -420,16 +420,16 @@ const SalesModule = {
       <form onsubmit="SalesModule.saveNewClientInline(event)">
         <div class="form-group">
           <label>Nombre Completo *</label>
-          <input id="nc-name" name="name" class="form-input" required value="${Utils.escHtml(prefillName)}" placeholder="Nombre completo">
+          <input id="nc-name" name="name" class="form-input" required value="${Utils.escHtml(prefillName)}" placeholder="Nombre completo" oninput="this.value = this.value.replace(/[0-9]/g, '')">
         </div>
         <div class="form-row">
           <div class="form-group">
             <label>DNI</label>
-            <input id="nc-dni" name="dni" class="form-input" placeholder="Opcional">
+            <input id="nc-dni" name="dni" class="form-input" placeholder="Ej: 38123456" oninput="this.value = this.value.replace(/[^0-9.]/g, '')">
           </div>
           <div class="form-group">
             <label>Teléfono</label>
-            <input id="nc-phone" name="phone" class="form-input" placeholder="Opcional">
+            <input id="nc-phone" name="phone" class="form-input" placeholder="Ej: 11 2345-6789" oninput="this.value = this.value.replace(/[^0-9+\-\s()]/g, '')">
           </div>
         </div>
         <div class="form-group">
@@ -455,6 +455,28 @@ const SalesModule = {
         const phone = f.phone.value.trim();
         const address = f.address.value.trim();
         const email = f.email.value.trim();
+
+        // Validaciones
+        const nameVal = Utils.validatePersonName(name, 'nombre del cliente');
+        if (!nameVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(nameVal.message, 'warning');
+            else alert(nameVal.message);
+            return;
+        }
+
+        const dniVal = Utils.validateDni(dni);
+        if (!dniVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(dniVal.message, 'warning');
+            else alert(dniVal.message);
+            return;
+        }
+
+        const phoneVal = Utils.validatePhone(phone);
+        if (!phoneVal.valid) {
+            if (typeof Toast !== 'undefined') Toast.show(phoneVal.message, 'warning');
+            else alert(phoneVal.message);
+            return;
+        }
 
         const newClient = await DB.saveClient({ name, dni, phone, address, email });
         Modal.close();

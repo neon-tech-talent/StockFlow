@@ -560,12 +560,12 @@ const TurnosModule = {
                   </select>
                 </div>
               ` : ''}
-              <input id="qa-client-name" name="client_name" class="form-input" required placeholder="Nombre completo del cliente" autofocus oninput="TurnosModule.onClientTyped()">
+              <input id="qa-client-name" name="client_name" class="form-input" required placeholder="Nombre completo del cliente" autofocus oninput="this.value = this.value.replace(/[0-9]/g, ''); TurnosModule.onClientTyped()">
             </div>
 
             <div class="form-group">
               <label>Teléfono / WhatsApp (Opcional)</label>
-              <input id="qa-client-phone" name="client_phone" class="form-input" placeholder="Ej: 11 2345-6789">
+              <input id="qa-client-phone" name="client_phone" class="form-input" placeholder="Ej: 11 2345-6789" oninput="this.value = this.value.replace(/[^0-9+\-\s()]/g, '')">
             </div>
 
             <!-- Fecha y Hora en Horario Argentino -->
@@ -728,6 +728,20 @@ const TurnosModule = {
 
     if (!clientName || !apptDate || !apptTime || !serviceSelect.value || !profSelect.value) {
       if (typeof Toast !== 'undefined') Toast.show('Por favor completa todos los campos obligatorios', 'warning');
+      return;
+    }
+
+    const nameVal = Utils.validatePersonName(clientName, 'nombre del cliente');
+    if (!nameVal.valid) {
+      if (typeof Toast !== 'undefined') Toast.show(nameVal.message, 'warning');
+      else alert(nameVal.message);
+      return;
+    }
+
+    const phoneVal = Utils.validatePhone(clientPhone);
+    if (!phoneVal.valid) {
+      if (typeof Toast !== 'undefined') Toast.show(phoneVal.message, 'warning');
+      else alert(phoneVal.message);
       return;
     }
 
@@ -914,16 +928,16 @@ const TurnosModule = {
         <div class="form-row">
           <div class="form-group">
             <label>Nombre *</label>
-            <input id="np-first" name="first_name" class="form-input" required placeholder="Ej: Carlos" value="${Utils.escHtml(prof?.first_name || '')}">
+            <input id="np-first" name="first_name" class="form-input" required placeholder="Ej: Carlos" value="${Utils.escHtml(prof?.first_name || '')}" oninput="this.value = this.value.replace(/[0-9]/g, '')">
           </div>
           <div class="form-group">
             <label>Apellido</label>
-            <input id="np-last" name="last_name" class="form-input" placeholder="Ej: Gómez" value="${Utils.escHtml(prof?.last_name || '')}">
+            <input id="np-last" name="last_name" class="form-input" placeholder="Ej: Gómez" value="${Utils.escHtml(prof?.last_name || '')}" oninput="this.value = this.value.replace(/[0-9]/g, '')">
           </div>
         </div>
         <div class="form-group">
           <label>Teléfono (Opcional)</label>
-          <input id="np-phone" name="phone" class="form-input" placeholder="Ej: 11 2345-6789" value="${Utils.escHtml(prof?.phone || '')}">
+          <input id="np-phone" name="phone" class="form-input" placeholder="Ej: 11 2345-6789" value="${Utils.escHtml(prof?.phone || '')}" oninput="this.value = this.value.replace(/[^0-9+\-\s()]/g, '')">
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
@@ -938,6 +952,29 @@ const TurnosModule = {
     const firstName = f.first_name.value.trim();
     const lastName = f.last_name.value.trim();
     const phone = f.phone.value.trim();
+
+    const fnVal = Utils.validatePersonName(firstName, 'nombre');
+    if (!fnVal.valid) {
+      if (typeof Toast !== 'undefined') Toast.show(fnVal.message, 'warning');
+      else alert(fnVal.message);
+      return;
+    }
+
+    if (lastName) {
+      const lnVal = Utils.validatePersonName(lastName, 'apellido');
+      if (!lnVal.valid) {
+        if (typeof Toast !== 'undefined') Toast.show(lnVal.message, 'warning');
+        else alert(lnVal.message);
+        return;
+      }
+    }
+
+    const phoneVal = Utils.validatePhone(phone);
+    if (!phoneVal.valid) {
+      if (typeof Toast !== 'undefined') Toast.show(phoneVal.message, 'warning');
+      else alert(phoneVal.message);
+      return;
+    }
 
     try {
       await DB.saveTurnosProfessional({
