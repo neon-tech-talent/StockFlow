@@ -57,7 +57,12 @@ const TurnosModule = {
 
   async switchTab(tab, presetDate = null) {
     this._activeTab = tab;
-    if (presetDate) this._selectedDate = presetDate;
+    const todayStr = Utils.todayStr();
+    if (presetDate) {
+      this._selectedDate = (tab === 'cargar' && presetDate < todayStr) ? todayStr : presetDate;
+    } else if (tab === 'cargar' && (!this._selectedDate || this._selectedDate < todayStr)) {
+      this._selectedDate = todayStr;
+    }
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${tab}'`));
@@ -567,7 +572,7 @@ const TurnosModule = {
             <div class="form-row">
               <div class="form-group">
                 <label>Fecha del Turno *</label>
-                <input id="qa-date" name="appt_date" type="date" class="form-input" required value="${this._selectedDate || Utils.todayStr()}">
+                <input id="qa-date" name="appt_date" type="date" class="form-input" required min="${Utils.todayStr()}" value="${(!this._selectedDate || this._selectedDate < Utils.todayStr()) ? Utils.todayStr() : this._selectedDate}">
               </div>
               <div class="form-group">
                 <label>Hora del Turno (Argentina) *</label>
@@ -726,15 +731,31 @@ const TurnosModule = {
       return;
     }
 
+    // Prohibir agendar turnos en fechas u horarios pasados
+    const todayStr = Utils.todayStr();
+    if (apptDate < todayStr) {
+      if (typeof Toast !== 'undefined') Toast.show('No se pueden agendar turnos en fechas pasadas.', 'warning');
+      else alert('No se pueden agendar turnos en fechas pasadas.');
+      return;
+    }
+
+    const apptDateTime = new Date(`${apptDate}T${apptTime}:00-03:00`);
+    // Si la fecha es hoy pero el horario ya pasó (con 2 minutos de tolerancia para el llenado)
+    if (apptDate === todayStr && apptDateTime.getTime() < Date.now() - 2 * 60 * 1000) {
+      if (typeof Toast !== 'undefined') Toast.show('No se pueden agendar turnos en un horario que ya pasó.', 'warning');
+      else alert('No se pueden agendar turnos en un horario que ya pasó.');
+      return;
+    }
+
     // Usar huso horario argentino (-03:00) explícitamente para almacenar en UTC sin distorsión
-    const startIso = new Date(`${apptDate}T${apptTime}:00-03:00`).toISOString();
+    const startIso = apptDateTime.toISOString();
     const serviceOpt = serviceSelect.selectedOptions[0];
     const profOpt = profSelect.selectedOptions[0];
 
     const serviceName = serviceOpt.dataset.name;
     const profName = profOpt.dataset.name;
 
-    const endIso = new Date(new Date(startIso).getTime() + duration * 60000).toISOString();
+    const endIso = new Date(apptDateTime.getTime() + duration * 60000).toISOString();
 
     const apptPayload = {
       client_id: this._selectedClientId || null,
@@ -771,10 +792,17 @@ const TurnosModule = {
   },
 
   _promptParallelAppointment(payload, existingMatches, apptDate, apptTime) {
-    const formattedDate = new Date(`${apptDate}T00:00:00-03:00`).toLocaleDateString('es-AR', {
-      timeZone: Utils.TIMEZONE,
-      weekday: 'long', day: '2-digit', month: '2-digit'
-    });
+    let formattedDate = '';
+    try {
+      const dObj = new Date(`${apptDate}T00:00:00-03:00`);
+      formattedDate = dObj.toLocaleDateString('es-AR', {
+        timeZone: Utils.TIMEZONE,
+        weekday: 'long', day: '2-digit', month: '2-digit'
+      });
+      formattedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+    } catch (e) {
+      formattedDate = apptDate;
+    }
 
     Modal.open(`
       <div style="text-align:left;">
@@ -830,8 +858,23 @@ const TurnosModule = {
     try {
       await DB.saveAppointment(payload);
 
+      // Formatear día en español para la notificación: ej. "Miércoles 02/09"
+      let formattedDay = '';
+      try {
+        const dObj = new Date(`${apptDate}T00:00:00-03:00`);
+        formattedDay = dObj.toLocaleDateString('es-AR', {
+          timeZone: Utils.TIMEZONE,
+          weekday: 'long',
+          day: '2-digit',
+          month: '2-digit'
+        });
+        formattedDay = formattedDay.charAt(0).toUpperCase() + formattedDay.slice(1);
+      } catch (e) {
+        formattedDay = apptDate;
+      }
+
       if (typeof Toast !== 'undefined') {
-        Toast.show(`¡Turno agendado con éxito para ${payload.client_name} a las ${apptTime} hs!`, 'success');
+        Toast.show(`¡Turno agendado con éxito para ${payload.client_name} el ${formattedDay} a las ${apptTime} hs!`, 'success', 4500);
       }
 
       // Actualizar fecha seleccionada para ver el turno en la agenda
