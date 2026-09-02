@@ -154,9 +154,8 @@ const TurnosModule = {
     const searchInput = document.getElementById('filter-search');
     if (searchInput) {
       searchInput.oninput = (e) => {
-        this._searchQuery = e.target.value.toLowerCase();
-        // Al escribir en el buscador, mostrar todos los resultados filtrados abajo
-        this._filterMode = this._searchQuery ? 'all_filtered' : 'day';
+        this._searchQuery = e.target.value.toLowerCase().trim();
+        this._filterMode = this._searchQuery ? 'all_filtered' : ((this._selectedProfId || this._selectedFilterClientId || (this._statusFilter && this._statusFilter !== 'activos')) ? 'all_filtered' : 'day');
         this._renderCalendar();
         this._renderSelectedDayAppointments();
       };
@@ -165,24 +164,43 @@ const TurnosModule = {
 
   onProfFilterChange(profId) {
     this._selectedProfId = profId;
-    // Al filtrar por responsable, mostrar todos sus turnos abajo
-    this._filterMode = (this._selectedProfId || this._selectedFilterClientId || this._searchQuery) ? 'all_filtered' : 'day';
+    this._filterMode = (this._selectedProfId || this._selectedFilterClientId || this._searchQuery || (this._statusFilter && this._statusFilter !== 'activos')) ? 'all_filtered' : 'day';
     this._renderCalendar();
     this._renderSelectedDayAppointments();
   },
 
   onClientFilterChange(clientId) {
     this._selectedFilterClientId = clientId;
-    // Al filtrar por cliente, mostrar todos sus turnos abajo
-    this._filterMode = (this._selectedFilterClientId || this._selectedProfId || this._searchQuery) ? 'all_filtered' : 'day';
+    this._filterMode = (this._selectedFilterClientId || this._selectedProfId || this._searchQuery || (this._statusFilter && this._statusFilter !== 'activos')) ? 'all_filtered' : 'day';
     this._renderCalendar();
     this._renderSelectedDayAppointments();
   },
 
   onStatusFilterChange(status) {
     this._statusFilter = status;
+    this._filterMode = (this._selectedFilterClientId || this._selectedProfId || this._searchQuery || (this._statusFilter && this._statusFilter !== 'activos')) ? 'all_filtered' : 'day';
     this._renderCalendar();
     this._renderSelectedDayAppointments();
+  },
+
+  async clearFilters() {
+    this._searchQuery = '';
+    this._selectedProfId = '';
+    this._selectedFilterClientId = '';
+    this._statusFilter = 'activos';
+    this._filterMode = 'day';
+
+    const searchInput = document.getElementById('filter-search');
+    if (searchInput) searchInput.value = '';
+    const profSelect = document.getElementById('filter-prof');
+    if (profSelect) profSelect.value = '';
+    const clientSelect = document.getElementById('filter-client');
+    if (clientSelect) clientSelect.value = '';
+    const statusSelect = document.getElementById('filter-status');
+    if (statusSelect) statusSelect.value = 'activos';
+
+    await this._renderCalendar();
+    await this._renderSelectedDayAppointments();
   },
 
   setFilterMode(mode) {
@@ -375,29 +393,36 @@ const TurnosModule = {
     if (!container) return;
 
     const allAppts = await this._getFilteredAppointments();
-    const isFilterActive = !!(this._selectedProfId || this._selectedFilterClientId || this._searchQuery);
+    const isFilterActive = !!(this._selectedProfId || this._selectedFilterClientId || this._searchQuery || (this._statusFilter && this._statusFilter !== 'activos'));
     
-    // Si se filtró por cliente/responsable/búsqueda y filterMode es all_filtered, mostrar todos los turnos
-    const showAllFiltered = (this._filterMode === 'all_filtered') || (isFilterActive && this._filterMode !== 'day');
+    // Al filtrar por cualquier valor, mostrar directamente todos los resultados debajo del calendario
+    const showAllFiltered = isFilterActive || (this._filterMode === 'all_filtered');
     
-    const targetAppts = showAllFiltered 
-      ? allAppts 
+    let targetAppts = showAllFiltered 
+      ? [...allAppts] 
       : allAppts.filter(a => Utils.toArgentinaDateStr(a.start_datetime) === this._selectedDate);
+
+    // Ordenar turnos cronológicamente por fecha y hora
+    targetAppts.sort((a, b) => new Date(a.start_datetime).getTime() - new Date(b.start_datetime).getTime());
 
     // Obtener nombres para los títulos
     let filterDescription = '';
     if (this._selectedFilterClientId) {
       const clients = await DB.getClients();
       const selClient = clients.find(c => c.id === this._selectedFilterClientId);
-      if (selClient) filterDescription = `del cliente ${selClient.name}`;
+      if (selClient) filterDescription += `del cliente "${selClient.name}"`;
     }
     if (this._selectedProfId) {
       const profs = await DB.getTurnosProfessionals();
       const selProf = profs.find(p => p.id === this._selectedProfId);
-      if (selProf) filterDescription += `${filterDescription ? ' con ' : 'del responsable '}${selProf.first_name} ${selProf.last_name || ''}`.trim();
+      if (selProf) filterDescription += `${filterDescription ? ' con ' : 'del responsable '}"${selProf.first_name} ${selProf.last_name || ''}"`.trim();
     }
     if (this._searchQuery) {
-      filterDescription += ` (búsqueda: "${this._searchQuery}")`;
+      filterDescription += `${filterDescription ? ' ' : ''}(búsqueda: "${this._searchQuery}")`;
+    }
+    if (this._statusFilter && this._statusFilter !== 'activos') {
+      const statusLabels = { todos: 'todos los estados', atendido: 'atendidos/cobrados', cancelado: 'cancelados' };
+      filterDescription += ` [${statusLabels[this._statusFilter] || this._statusFilter}]`;
     }
 
     const dateFormatted = new Date(`${this._selectedDate}T00:00:00-03:00`).toLocaleDateString('es-AR', {
@@ -412,19 +437,19 @@ const TurnosModule = {
         <div>
           <h3 style="margin:0; font-size:1.1rem; color:var(--text-main); font-weight:800;">
             ${showAllFiltered 
-              ? `🔍 Todos los Turnos Filtrados ${filterDescription} (${targetAppts.length})` 
+              ? `🔍 Turnos Filtrados ${filterDescription} (${targetAppts.length})` 
               : `📅 Turnos del ${dateFormatted.charAt(0).toUpperCase() + dateFormatted.slice(1)} ${isToday ? '<span class="badge badge-success" style="font-size:0.75rem; margin-left:0.4rem;">HOY</span>' : ''}`}
           </h3>
           <small class="text-muted">
             ${showAllFiltered 
-              ? `Mostrando todos los turnos que coinciden con los filtros seleccionados` 
+              ? `Mostrando todos los turnos que coinciden con los filtros seleccionados (${targetAppts.length} ${targetAppts.length === 1 ? 'turno' : 'turnos'})` 
               : `${targetAppts.length} ${targetAppts.length === 1 ? 'turno agendado' : 'turnos agendados'} para este día`}
           </small>
         </div>
         <div class="btn-row" style="gap:0.5rem; flex-wrap:wrap;">
           ${isFilterActive ? `
-            <button class="btn btn-sm ${showAllFiltered ? 'btn-primary' : 'btn-outline'}" onclick="TurnosModule.setFilterMode('${showAllFiltered ? 'day' : 'all_filtered'}')">
-              ${showAllFiltered ? `📅 Ver solo día seleccionado (${this._selectedDate})` : `📋 Ver todos los filtrados (${allAppts.length})`}
+            <button class="btn btn-sm btn-outline" style="color:var(--accent); border-color:var(--border);" onclick="TurnosModule.clearFilters()">
+              🧹 Limpiar Filtros
             </button>
           ` : ''}
           <button class="btn btn-primary btn-sm" onclick="TurnosModule.switchTab('cargar', '${this._selectedDate}')">
