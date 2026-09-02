@@ -56,17 +56,22 @@ const CajaModule = {
         }
     },
 
-    openExtractionModal() {
+    async openExtractionModal() {
+        const currentTotal = await DB.getCashTotal();
         Modal.open(`
       <h2 class="modal-title">Realizar Extracción de Efectivo</h2>
-      <form onsubmit="CajaModule.saveExtraction(event)">
+      <div style="background:var(--accent-subtle); border:1px solid var(--border); border-radius:var(--radius-sm); padding:0.65rem 0.85rem; margin-bottom:1.2rem; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.85rem; color:var(--text-muted);">Efectivo actual en caja:</span>
+        <strong style="color:var(--accent); font-size:1.1rem;">${Utils.currency(currentTotal)}</strong>
+      </div>
+      <form onsubmit="CajaModule.saveExtraction(event, ${currentTotal})">
         <div class="form-group">
           <label>Monto a extraer *</label>
           <input name="amount" type="number" step="0.01" min="0.01" class="form-input" required placeholder="0.00">
         </div>
         <div class="form-group">
           <label>Motivo / Comentario *</label>
-          <textarea name="reason" class="form-input" required placeholder="Ej: Pago a proveedor..." rows="3"></textarea>
+          <textarea name="reason" class="form-input" required placeholder="Ej: Pago a proveedor, retiro personal..." rows="3"></textarea>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
@@ -75,15 +80,41 @@ const CajaModule = {
       </form>`);
     },
 
-    async saveExtraction(e) {
+    async saveExtraction(e, currentTotal) {
         e.preventDefault();
         const f = e.target;
-        const amount = parseFloat(f.amount.value);
+        const amount = parseFloat(f.amount.value) || 0;
         const reason = f.reason.value.trim();
 
-        await DB.saveCashMovement({ amount: -amount, type: 'extraccion', reason: reason });
-        Modal.close();
-        if (typeof Toast !== 'undefined') Toast.show('Extracción registrada con éxito', 'success');
-        await this.render(document.getElementById('content'));
+        if (amount <= 0) {
+            if (typeof Toast !== 'undefined') Toast.show('Ingresa un monto válido mayor a 0', 'warning');
+            return;
+        }
+
+        if (currentTotal !== undefined && amount > currentTotal) {
+            const ok = confirm(`⚠️ Atención: El monto a extraer (${Utils.currency(amount)}) supera el efectivo actual en caja (${Utils.currency(currentTotal)}).\n\n¿Deseas continuar y dejar la caja en saldo negativo?`);
+            if (!ok) return;
+        }
+
+        const submitBtn = f.querySelector('button[type="submit"]');
+        const origText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ Registrando extracción...';
+        }
+
+        try {
+            await DB.saveCashMovement({ amount: -amount, type: 'extraccion', reason: reason });
+            Modal.close();
+            if (typeof Toast !== 'undefined') Toast.show('Extracción registrada con éxito', 'success');
+            await this.render(document.getElementById('content'));
+        } catch (err) {
+            console.error("Error al registrar extracción:", err);
+            if (typeof Toast !== 'undefined') Toast.show('Error al registrar la extracción', 'danger');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origText;
+            }
+        }
     }
 };

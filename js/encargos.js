@@ -823,6 +823,13 @@ const EncargosModule = {
         const depositPaymentType = f.deposit_payment_type.value;
         const notes = f.notes.value.trim();
 
+        const submitBtn = f.querySelector('button[type="submit"]');
+        const origText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ Guardando encargo...';
+        }
+
         try {
             let finalClientId = this._selectedClientId || null;
 
@@ -866,6 +873,10 @@ const EncargosModule = {
         } catch (err) {
             console.error("Error al guardar encargo:", err);
             if (typeof Toast !== 'undefined') Toast.show('Error al guardar el encargo', 'danger');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origText;
+            }
         }
     },
 
@@ -1092,6 +1103,13 @@ const EncargosModule = {
         const f = e.target;
         const paymentType = f.payment_type ? f.payment_type.value : 'efectivo';
 
+        const submitBtn = f.querySelector('button[type="submit"]');
+        const origText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ Completando entrega...';
+        }
+
         try {
             await DB.completeCustomOrder(orderId, paymentType);
             Modal.close();
@@ -1100,6 +1118,10 @@ const EncargosModule = {
         } catch (err) {
             console.error("Error al completar encargo:", err);
             if (typeof Toast !== 'undefined') Toast.show(err.message || 'Error al completar el encargo', 'danger');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origText;
+            }
         }
     },
 

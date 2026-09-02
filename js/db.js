@@ -58,6 +58,17 @@ const DB = {
   async deleteProduct(id) { await this.client.from('products').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustStock(id, delta) {
     if (!id) return null;
+    try {
+      const { data: rpcStock, error: rpcErr } = await this.client.rpc('adjust_product_stock_atomic', {
+        p_product_id: id,
+        p_delta: parseFloat(delta) || 0
+      });
+      if (!rpcErr && rpcStock !== null && rpcStock !== undefined) {
+        return { id, stock: rpcStock };
+      }
+    } catch (e) {}
+
+    // Fallback estándar si la función RPC aún no fue creada en Supabase
     const { data } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
     if (data) {
       const newStock = Math.max(0, Math.round(((parseFloat(data.stock) || 0) + parseFloat(delta)) * 1000) / 1000);
@@ -83,6 +94,16 @@ const DB = {
     }
   },
   async updateBalance(id, delta) {
+    if (!id) return;
+    try {
+      const { data: rpcBal, error: rpcErr } = await this.client.rpc('adjust_client_balance_atomic', {
+        p_client_id: id,
+        p_delta: parseFloat(delta) || 0
+      });
+      if (!rpcErr && rpcBal !== null && rpcBal !== undefined) return;
+    } catch (e) {}
+
+    // Fallback estándar si la función RPC aún no fue creada en Supabase
     const { data } = await this.client.from('clients').select('balance').eq('id', id).eq('admin_id', this._adminId()).single();
     if (data) await this.client.from('clients').update({ balance: parseFloat(data.balance) + delta }).eq('id', id).eq('admin_id', this._adminId());
   },
@@ -98,7 +119,7 @@ const DB = {
     const { data } = await q;
     return data || [];
   },
-  async saveSale(sale, items) {
+  async saveSale(sale, items, options = {}) {
     const { data: sData, error } = await this.client.from('sales').insert({
       total: sale.total, payment_type: sale.paymentType, client_id: sale.clientId,
       client_name: sale.clientName, invoiced: sale.invoiced || false, admin_id: this._adminId()
@@ -110,6 +131,7 @@ const DB = {
     const itemsToInsert = items.map(it => ({
       sale_id: saleId, product_id: it.productId || null, product_name: it.productName,
       quantity: parseFloat(it.quantity) || 0, unit_price: parseFloat(it.unitPrice) || 0, 
+      cost_price: parseFloat(it.costPrice ?? it.cost_price ?? 0) || 0,
       discount_type: it.discountType || 'none', discount_value: parseFloat(it.discountValue) || 0,
       admin_id: this._adminId()
     }));
@@ -126,6 +148,7 @@ const DB = {
           product_name: isDecimal ? `${it.productName} (${qty} ${unitAbbr})` : it.productName,
           quantity: isDecimal ? 1 : Math.round(qty),
           unit_price: isDecimal ? Math.round((parseFloat(it.unitPrice || 0) * qty) * 100) / 100 : parseFloat(it.unitPrice) || 0,
+          cost_price: parseFloat(it.costPrice ?? it.cost_price ?? 0) || 0,
           discount_type: it.discountType || 'none',
           discount_value: parseFloat(it.discountValue) || 0,
           admin_id: this._adminId()
@@ -139,12 +162,32 @@ const DB = {
         await this.adjustStock(it.productId, -(parseFloat(it.quantity) || 0)); 
       }
     }
+
+    // Gestionar movimiento en caja (efectivo)
     if (sale.paymentType === 'efectivo') {
-      await this.saveCashMovement({ amount: sale.total, type: 'venta', reason: `Venta #${saleId.slice(-4)}` });
+      const cashAmt = (options.customCashAmount !== undefined) ? options.customCashAmount : sale.total;
+      if (cashAmt > 0) {
+        await this.saveCashMovement({ 
+          amount: cashAmt, 
+          type: 'venta', 
+          reason: options.cashReason || `Venta #${saleId.slice(-4)}` 
+        });
+      }
     }
+
+    // Gestionar deuda en cuenta corriente
     if (sale.paymentType === 'cuenta_corriente' && sale.clientId) {
-      await this.addMovement({ client_id: sale.clientId, sale_id: saleId, amount: sale.total, type: 'venta', notes: 'Venta' });
-      await this.updateBalance(sale.clientId, sale.total);
+      const accAmt = (options.customAccountAmount !== undefined) ? options.customAccountAmount : sale.total;
+      if (accAmt > 0) {
+        await this.addMovement({ 
+          client_id: sale.clientId, 
+          sale_id: saleId, 
+          amount: accAmt, 
+          type: 'venta', 
+          notes: options.accountNotes || 'Venta' 
+        });
+        await this.updateBalance(sale.clientId, accAmt);
+      }
     }
     return saleId;
   },
@@ -318,7 +361,9 @@ const DB = {
         const saleItems = monthlyItems.filter(i => i.sale_id === s.id);
         saleItems.forEach(it => {
           const p = prods.find(pr => pr.id === it.product_id);
-          const cost = parseFloat(p?.cost_price) || 0;
+          const cost = (it.cost_price !== undefined && it.cost_price !== null && it.cost_price !== '') 
+            ? parseFloat(it.cost_price) 
+            : (parseFloat(p?.cost_price) || 0);
           const qty = parseFloat(it.quantity) || 0;
           let unitPrice = parseFloat(it.unit_price) || 0;
           let subtotal = unitPrice * qty;
@@ -932,24 +977,36 @@ const DB = {
     }
 
     // Formatear ítems para saveSale (saveSale descuenta el stock automáticamente y registra la venta)
-    const saleCart = items.map(it => ({
-      productId: it.product_id,
-      productName: it.product_name,
-      unitPrice: parseFloat(it.unit_price) || 0,
-      quantity: parseFloat(it.quantity) || 1,
-      unit: 'Unidades',
-      discountType: 'none',
-      discountValue: 0
-    }));
+    const saleCart = items.map(it => {
+      const prod = products.find(p => p.id === it.product_id);
+      return {
+        productId: it.product_id,
+        productName: it.product_name,
+        unitPrice: parseFloat(it.unit_price) || 0,
+        costPrice: parseFloat(prod?.cost_price) || 0,
+        quantity: parseFloat(it.quantity) || 1,
+        unit: prod?.unit || 'Unidades',
+        discountType: 'none',
+        discountValue: 0
+      };
+    });
+
+    const remainingAmount = parseFloat(order.remaining_amount) || 0;
 
     // Registrar venta oficial en 'sales' y descontar inventario
+    // IMPORTANTE: Al completar, a la caja física o cuenta corriente solo debe ingresar el saldo pendiente (remainingAmount),
+    // ya que si hubo una seña en efectivo, dicha seña ya ingresó a la caja el día de la creación del encargo.
     const saleId = await this.saveSale({
       total: parseFloat(order.total_amount) || 0,
       paymentType: remainingPaymentType,
       clientId: order.client_id,
       clientName: order.client_name,
       invoiced: false
-    }, saleCart);
+    }, saleCart, {
+      customCashAmount: remainingPaymentType === 'efectivo' ? remainingAmount : 0,
+      customAccountAmount: remainingPaymentType === 'cuenta_corriente' ? remainingAmount : 0,
+      cashReason: `Cobro Saldo Encargo #${order.order_number || ''} (${order.client_name || ''})`
+    });
 
     // Marcar encargo como completado
     const { data: completedOrder, error } = await this.client

@@ -69,13 +69,13 @@ const SuperAdminModule = {
 
       const rows = data.map(u => {
         const prof = profileMap[u.id];
-        const sysName = prof?.is_configured ? prof.system_name : '<em style="color:var(--text-dim)">Sin configurar</em>';
+        const sysName = prof?.is_configured ? Utils.escHtml(prof.system_name) : '<em style="color:var(--text-dim)">Sin configurar</em>';
         const isSelf  = u.username === 'tutuca';
         const turnosEnabled = moduleMap[u.id]?.turnos !== false;
 
         return `
           <tr>
-            <td><strong>${u.username}</strong></td>
+            <td><strong>${Utils.escHtml(u.username)}</strong></td>
             <td>${u.role === 'superadmin' ? '<span class="badge badge-warning">Superadmin</span>' : '<span class="badge badge-info">Admin</span>'}</td>
             <td>${sysName}</td>
             <td>

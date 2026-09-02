@@ -10,8 +10,8 @@ const SalesModule = {
     async renderHistory(el) {
         const allSales = await DB.getSales();
         const filtered = allSales.filter(s => {
-            const d = new Date(s.created_at);
-            return d.getMonth() === this.historyMonth && d.getFullYear() === this.historyYear;
+            const ym = Utils.getArgentinaYearMonth(new Date(s.created_at));
+            return ym.month === this.historyMonth && ym.year === this.historyYear;
         });
 
         const totals = { efectivo: 0, transferencia: 0, cuenta_corriente: 0, qr: 0, debito: 0, credito: 0 };
@@ -89,7 +89,7 @@ const SalesModule = {
             ${filtered.map(s => `
               <tr class="${s.voided ? 'row-voided' : ''}">
                 <td>#${s.id.slice(-4)}</td>
-                <td>${new Date(s.created_at).toLocaleString('es')}</td>
+                <td>${Utils.date(s.created_at)}</td>
                 <td><strong>${Utils.escHtml(s.client_name || 'Consumidor Final')}</strong></td>
                 <td><strong>${Utils.currency(s.total)}</strong></td>
                 <td><span class="badge badge-info">${s.payment_type.toUpperCase()}</span></td>
@@ -282,7 +282,9 @@ const SalesModule = {
             }
             const initialQty = Math.min(delta, stock);
             this.cart.push({ 
-                productId: id, productName: name, unitPrice: price, quantity: initialQty, 
+                productId: id, productName: name, unitPrice: price, 
+                costPrice: parseFloat(prod?.cost_price) || 0,
+                quantity: initialQty, 
                 maxStock: stock, unit: unit,
                 discountType: 'none', discountValue: 0
             });
@@ -519,6 +521,8 @@ const SalesModule = {
     },
 
     async confirmSale() {
+        if (this._isSubmittingSale) return;
+
         if (!this.cart.length) {
             if (typeof Toast !== 'undefined') Toast.show('El carrito está vacío', 'warning');
             else alert('Carrito vacío');
@@ -529,6 +533,14 @@ const SalesModule = {
             else alert('Selecciona un cliente para cuenta corriente');
             return;
         }
+
+        const confirmBtn = document.querySelector('button[onclick="SalesModule.confirmSale()"]');
+        const origText = confirmBtn ? confirmBtn.innerHTML : '';
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '⏳ Registrando venta...';
+        }
+        this._isSubmittingSale = true;
         
         try {
             const invoiced = document.getElementById('sale-invoiced') ? document.getElementById('sale-invoiced').checked : false;
@@ -544,6 +556,12 @@ const SalesModule = {
             console.error(e);
             if (typeof Toast !== 'undefined') Toast.show('Error al registrar la venta', 'danger');
             else alert('Error al guardar la venta');
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = origText;
+            }
+        } finally {
+            this._isSubmittingSale = false;
         }
     },
 

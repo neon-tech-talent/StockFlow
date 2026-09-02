@@ -1188,6 +1188,13 @@ const TurnosModule = {
     const f = e.target;
     const paymentType = f.payment_type ? f.payment_type.value : 'efectivo';
 
+    const submitBtn = f.querySelector('button[type="submit"]');
+    const origText = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '⏳ Registrando venta y completando...';
+    }
+
     try {
       await DB.completeAppointmentAndCreateSale(apptId, paymentType);
       Modal.close();
@@ -1197,6 +1204,10 @@ const TurnosModule = {
     } catch (err) {
       console.error("Error al completar turno:", err);
       if (typeof Toast !== 'undefined') Toast.show(err.message || 'Error al completar turno', 'danger');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origText;
+      }
     }
   }
 };

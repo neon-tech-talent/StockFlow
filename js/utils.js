@@ -93,7 +93,13 @@ const Utils = {
         return { efectivo: '💵', debito: '💳', credito: '💳', transferencia: '🏦', cuenta_corriente: '📋', qr: '📱' }[t] || '💰';
     },
     escHtml(s) { 
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); 
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;'); 
     },
     skeleton(rows = 4) {
         return `<div class="skeleton-container" aria-label="Cargando contenido">${Array.from({ length: rows }, () => `<div class="skeleton-row"></div>`).join('')}</div>`;
