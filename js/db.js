@@ -260,12 +260,13 @@ const DB = {
         return this._getEmptyStats(cm, cy);
       }
 
-      const [salesRes, itemsRes, prodsRes, expRes, clientsRes] = await Promise.allSettled([
+      const [salesRes, itemsRes, prodsRes, expRes, clientsRes, servicesRes] = await Promise.allSettled([
         this.client.from('sales').select('*').eq('admin_id', aid).eq('voided', false),
         this.client.from('sale_items').select('*').eq('admin_id', aid),
         this.client.from('products').select('*').eq('admin_id', aid),
         this.client.from('expenses').select('*').eq('admin_id', aid),
-        this.client.from('clients').select('*').eq('admin_id', aid)
+        this.client.from('clients').select('*').eq('admin_id', aid),
+        this.client.from('turnos_services').select('*').eq('admin_id', aid)
       ]);
 
       const sales   = (salesRes.status === 'fulfilled' && Array.isArray(salesRes.value?.data)) ? salesRes.value.data : [];
@@ -273,6 +274,8 @@ const DB = {
       const prods   = (prodsRes.status === 'fulfilled' && Array.isArray(prodsRes.value?.data)) ? prodsRes.value.data : [];
       const expenses= (expRes.status === 'fulfilled' && Array.isArray(expRes.value?.data)) ? expRes.value.data : [];
       const clients = (clientsRes.status === 'fulfilled' && Array.isArray(clientsRes.value?.data)) ? clientsRes.value.data : [];
+      const turnosServices = (servicesRes.status === 'fulfilled' && Array.isArray(servicesRes.value?.data)) ? servicesRes.value.data : [];
+      const serviceNames = new Set(turnosServices.map(ts => (ts.name || '').toLowerCase().trim()));
 
       const parseDate = (dStr) => {
         if (!dStr) return null;
@@ -364,7 +367,7 @@ const DB = {
         .sort((a, b) => b.total - a.total)
         .slice(0, 8);
 
-      // Top Productos y Rentables
+      // Top Productos y Rentables (excluyendo servicios de turnos)
       const itemsForStats = monthlyItems.length > 0 ? monthlyItems : (items || []).filter(it => {
         const parentSale = validSales.find(s => s.id === it.sale_id);
         return !!parentSale;
@@ -376,6 +379,17 @@ const DB = {
         const p = prods.find(pr => pr.id === it.product_id);
         
         let rawName = (it.product_name || p?.name || 'Producto').trim();
+        const lowerRaw = rawName.toLowerCase();
+
+        // Identificar y excluir servicios generados desde el módulo de Turnos
+        const isTurnoService = (it.unit === 'Servicio') || 
+                               lowerRaw.includes('(turno') || 
+                               lowerRaw.endsWith('(turno)') ||
+                               (!it.product_id && (serviceNames.has(lowerRaw) || serviceNames.has(rawName.replace(/\s*\([^)]*\)$/, '').toLowerCase().trim())));
+
+        // Los turnos/servicios no deben figurar en los rankings de productos físicos
+        if (isTurnoService) return;
+
         // Limpiar sufijos fraccionados como "(0.1 kg)" o "(0.25 L)" si vinieron del fallback
         let cleanName = rawName;
         const matchDecimal = rawName.match(/^(.*?)\s*\(\d+(\.\d+)?\s*(kg|l|u\.|porc\.|m)?\)$/i);
@@ -383,7 +397,6 @@ const DB = {
           cleanName = matchDecimal[1].trim();
         }
 
-        // Si es un servicio exclusivo de turnos sin producto asociado, mantener su nombre
         const prodKey = cleanName.toLowerCase();
         const prodDisplayName = p?.name || cleanName;
         const qty = parseFloat(it.quantity) || 0;
