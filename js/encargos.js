@@ -978,12 +978,70 @@ const EncargosModule = {
         if (!o) return;
 
         const remaining = parseFloat(o.remaining_amount) || 0;
+        const products = await DB.getProducts();
+        const items = o.custom_order_items || [];
+        const stockIssues = [];
+
+        items.forEach(it => {
+            if (it.product_id) {
+                const prod = products.find(p => p.id === it.product_id);
+                const neededQty = parseFloat(it.quantity) || 0;
+                const currentStock = prod ? (parseFloat(prod.stock) || 0) : 0;
+                const unitAbbr = (typeof Utils !== 'undefined' && Utils.unitAbbr) ? Utils.unitAbbr(prod?.unit || it.unit) : (prod?.unit || 'u.');
+
+                if (!prod) {
+                    stockIssues.push({
+                        name: it.product_name,
+                        needed: neededQty,
+                        available: 0,
+                        unit: unitAbbr,
+                        reason: 'Producto eliminado del catálogo'
+                    });
+                } else if (currentStock < neededQty) {
+                    stockIssues.push({
+                        name: prod.name,
+                        needed: neededQty,
+                        available: currentStock,
+                        unit: unitAbbr,
+                        reason: 'Stock insuficiente'
+                    });
+                }
+            }
+        });
+
+        const hasStockIssue = stockIssues.length > 0;
+        if (hasStockIssue && typeof Toast !== 'undefined') {
+            Toast.show(`⚠️ Stock insuficiente para entregar el encargo #${o.order_number || ''}`, 'warning', 5000);
+        }
 
         Modal.open(`
       <h2 class="modal-title">🚀 Entregar y Finalizar Encargo #${o.order_number || ''}</h2>
       <p class="text-muted" style="margin-top:-0.8rem; margin-bottom:1.25rem; font-size:0.9rem;">
         Al confirmar, se descontará el stock físico automáticamente y se creará el comprobante de venta oficial.
       </p>
+
+      ${hasStockIssue ? `
+        <div style="background:rgba(244,63,94,0.12); border:1px solid rgba(244,63,94,0.45); border-radius:var(--radius-sm); padding:0.9rem 1rem; margin-bottom:1.25rem;">
+          <div style="display:flex; align-items:center; gap:0.5rem; color:var(--red); font-weight:700; font-size:0.95rem; margin-bottom:0.4rem;">
+            <span style="font-size:1.15rem;">🚫</span>
+            <span>No se puede entregar: Stock Físico Insuficiente</span>
+          </div>
+          <p style="font-size:0.85rem; color:var(--text-main); margin-bottom:0.5rem;">
+            No tienes suficiente inventario para los siguientes productos de este encargo:
+          </p>
+          <div style="display:flex; flex-direction:column; gap:0.35rem; background:rgba(0,0,0,0.25); border-radius:var(--radius-xs); padding:0.6rem 0.85rem; margin-bottom:0.6rem;">
+            ${stockIssues.map(si => `
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem;">
+                <span>📦 <strong>${Utils.escHtml(si.name)}</strong></span>
+                <span>Requiere: <strong>${si.needed} ${si.unit}</strong> | Stock: <span style="color:var(--red); font-weight:700;">${si.available} ${si.unit}</span></span>
+              </div>
+            `).join('')}
+          </div>
+          <p style="font-size:0.8rem; color:var(--text-muted); margin:0;">
+            💡 <em>Ingresa o ajusta el stock en la sección <strong>Stock</strong> antes de poder entregar este encargo.</em>
+          </p>
+        </div>
+      ` : ''}
 
       <form onsubmit="EncargosModule.confirmDelivery(event, '${o.id}')">
         <div class="card" style="margin-bottom:1.25rem; padding:1.1rem; background:var(--bg-main);">
@@ -1022,8 +1080,8 @@ const EncargosModule = {
 
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
-          <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg, var(--green) 0%, #059669 100%);">
-            ✅ Confirmar Entrega y Descontar Stock
+          <button type="submit" class="btn btn-primary" ${hasStockIssue ? 'disabled style="opacity:0.5; cursor:not-allowed; background:var(--bg-tertiary); color:var(--text-muted);"' : 'style="background:linear-gradient(135deg, var(--green) 0%, #059669 100%);"'}>
+            ${hasStockIssue ? '🚫 Stock Insuficiente para Entregar' : '✅ Confirmar Entrega y Descontar Stock'}
           </button>
         </div>
       </form>`);

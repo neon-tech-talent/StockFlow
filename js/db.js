@@ -904,6 +904,28 @@ const DB = {
     if (order.status === 'completado') throw new Error("El encargo ya fue completado.");
 
     const items = order.custom_order_items || [];
+    const products = await this.getProducts();
+
+    // Validar disponibilidad de stock físico para cada producto del encargo
+    const insufficientStock = [];
+    for (const it of items) {
+      if (it.product_id) {
+        const prod = products.find(p => p.id === it.product_id);
+        const neededQty = parseFloat(it.quantity) || 0;
+        const currentStock = prod ? (parseFloat(prod.stock) || 0) : 0;
+        const unitAbbr = (typeof Utils !== 'undefined' && Utils.unitAbbr) ? Utils.unitAbbr(prod?.unit || it.unit) : (prod?.unit || 'u.');
+
+        if (!prod) {
+          insufficientStock.push(`"${it.product_name}" (Producto eliminado del inventario)`);
+        } else if (currentStock < neededQty) {
+          insufficientStock.push(`"${prod.name}" (Requiere ${neededQty} ${unitAbbr}, Disponible: ${currentStock} ${unitAbbr})`);
+        }
+      }
+    }
+
+    if (insufficientStock.length > 0) {
+      throw new Error(`Stock insuficiente para entregar este encargo:\n• ${insufficientStock.join('\n• ')}`);
+    }
 
     // Formatear ítems para saveSale (saveSale descuenta el stock automáticamente y registra la venta)
     const saleCart = items.map(it => ({
