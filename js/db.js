@@ -372,20 +372,28 @@ const DB = {
 
       const prodUnits = {}, prodProfit = {};
       itemsForStats.forEach(it => {
-        // Excluir servicios cargados desde turnos (no tienen product_id o no están en el catálogo de productos físicos)
+        // Encontrar producto actual si existe en catálogo para obtener su costo
         const p = prods.find(pr => pr.id === it.product_id);
-        if (!it.product_id || !p) return;
+        
+        let rawName = (it.product_name || p?.name || 'Producto').trim();
+        // Limpiar sufijos fraccionados como "(0.1 kg)" o "(0.25 L)" si vinieron del fallback
+        let cleanName = rawName;
+        const matchDecimal = rawName.match(/^(.*?)\s*\(\d+(\.\d+)?\s*(kg|l|u\.|porc\.|m)?\)$/i);
+        if (matchDecimal && matchDecimal[1]) {
+          cleanName = matchDecimal[1].trim();
+        }
 
-        const prodKey = it.product_id;
-        const prodName = p?.name || it.product_name || 'Producto';
+        // Si es un servicio exclusivo de turnos sin producto asociado, mantener su nombre
+        const prodKey = cleanName.toLowerCase();
+        const prodDisplayName = p?.name || cleanName;
         const qty = parseFloat(it.quantity) || 0;
         const unitPrice = parseFloat(it.unit_price) || 0;
         const costPrice = parseFloat(p?.cost_price) || 0;
 
-        if (!prodUnits[prodKey]) prodUnits[prodKey] = { name: prodName, units: 0 };
-        prodUnits[prodKey].units += qty;
+        if (!prodUnits[prodKey]) prodUnits[prodKey] = { name: prodDisplayName, units: 0 };
+        prodUnits[prodKey].units = Math.round((prodUnits[prodKey].units + qty) * 1000) / 1000;
 
-        if (!prodProfit[prodKey]) prodProfit[prodKey] = { name: prodName, profit: 0 };
+        if (!prodProfit[prodKey]) prodProfit[prodKey] = { name: prodDisplayName, profit: 0 };
         let itemRevenue = unitPrice * qty;
         const discVal = parseFloat(it.discount_value) || 0;
         if (it.discount_type === 'percentage') {
@@ -394,7 +402,7 @@ const DB = {
           itemRevenue -= discVal;
         }
         const profit = Math.max(0, itemRevenue) - (costPrice * qty);
-        prodProfit[prodKey].profit += profit;
+        prodProfit[prodKey].profit = Math.round((prodProfit[prodKey].profit + profit) * 100) / 100;
       });
 
       const topProducts = Object.values(prodUnits)

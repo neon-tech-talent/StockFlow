@@ -281,9 +281,7 @@ const StatsModule = {
                             ticks: {
                                 color: textClr,
                                 font: { size: 11 },
-                                precision: 0,
-                                stepSize: 1,
-                                callback: v => Number.isInteger(v) ? v + ' u.' : ''
+                                callback: v => v > 0 ? (Number.isInteger(v) ? v + ' u.' : v.toLocaleString('es-AR') + ' u.') : '0'
                             }
                         }
                     }
