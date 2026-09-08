@@ -888,6 +888,13 @@ const DB = {
     const isNew = !orderData.id;
     const totalAmount = items.reduce((sum, it) => sum + (parseFloat(it.unit_price || it.unitPrice || 0) * parseFloat(it.quantity || 1)), 0);
     const depositAmount = parseFloat(orderData.deposit_amount || orderData.depositAmount || 0);
+
+    if (depositAmount > totalAmount) {
+      const msgTotal = (typeof Utils !== 'undefined' && Utils.currency) ? Utils.currency(totalAmount) : `$${totalAmount}`;
+      const msgDeposit = (typeof Utils !== 'undefined' && Utils.currency) ? Utils.currency(depositAmount) : `$${depositAmount}`;
+      throw new Error(`La seña (${msgDeposit}) no puede ser mayor al monto total del encargo (${msgTotal}).`);
+    }
+
     const remainingAmount = Math.max(0, totalAmount - depositAmount);
 
     const payload = {

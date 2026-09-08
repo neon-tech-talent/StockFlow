@@ -326,7 +326,7 @@ const EncargosModule = {
 
         Modal.open(`
       <h2 class="modal-title">${orderId ? '✏️ Editar Encargo' : '➕ Nuevo Encargo Programado'}</h2>
-      <form onsubmit="EncargosModule.saveOrder(event, '${orderId || ''}')">
+      <form id="encargo-form" onsubmit="EncargosModule.saveOrder(event, '${orderId || ''}')">
         
         <!-- Sección 1: Cliente -->
         <div class="card" style="margin-bottom:1.1rem; padding:1.1rem;">
@@ -454,6 +454,7 @@ const EncargosModule = {
             <div class="form-group" style="margin:0;">
               <label>Seña Dejada ($)</label>
               <input id="no-deposit" name="deposit_amount" type="number" step="0.01" min="0" value="${existingOrder?.deposit_amount || 0}" class="form-input" oninput="EncargosModule.updateCartTotals()">
+              <small id="no-deposit-error" style="color:var(--red); font-size:0.8rem; font-weight:600; display:none; margin-top:0.35rem;"></small>
             </div>
             <div class="form-group" style="margin:0;">
               <label>Medio de Pago de Seña</label>
@@ -781,7 +782,41 @@ const EncargosModule = {
 
     updateCartTotals() {
         const total = this._cart.reduce((s, it) => s + (it.subtotal || 0), 0);
-        const deposit = parseFloat(document.getElementById('no-deposit')?.value || 0);
+        const depositInput = document.getElementById('no-deposit');
+        const depositErr = document.getElementById('no-deposit-error');
+        const submitBtn = document.querySelector('#encargo-form button[type="submit"]') || document.querySelector('button[type="submit"]');
+
+        let deposit = parseFloat(depositInput?.value || 0);
+        if (isNaN(deposit)) deposit = 0;
+
+        if (depositInput) {
+            depositInput.max = total > 0 ? total : 0;
+            if (deposit > total && total > 0) {
+                depositInput.style.borderColor = 'var(--red)';
+                depositInput.style.boxShadow = '0 0 0 2px rgba(244,63,94,0.25)';
+                if (depositErr) {
+                    depositErr.textContent = `⚠️ La seña no puede ser mayor al total del encargo (${Utils.currency(total)})`;
+                    depositErr.style.display = 'block';
+                }
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.style.opacity = '0.5';
+                    submitBtn.style.cursor = 'not-allowed';
+                    submitBtn.title = 'La seña no puede superar el total del pedido';
+                }
+            } else {
+                depositInput.style.borderColor = '';
+                depositInput.style.boxShadow = '';
+                if (depositErr) depositErr.style.display = 'none';
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.style.opacity = '';
+                    submitBtn.style.cursor = '';
+                    submitBtn.title = '';
+                }
+            }
+        }
+
         const remaining = Math.max(0, total - deposit);
 
         const totalEl = document.getElementById('no-total-display');
@@ -825,6 +860,27 @@ const EncargosModule = {
 
         const submitBtn = f.querySelector('button[type="submit"]');
         const origText = submitBtn ? submitBtn.innerHTML : '';
+
+        const totalAmount = this._cart.reduce((s, it) => s + (it.subtotal || 0), 0);
+        if (depositAmount > totalAmount) {
+            if (typeof Toast !== 'undefined') {
+                Toast.show(`La seña (${Utils.currency(depositAmount)}) no puede ser mayor al total del encargo (${Utils.currency(totalAmount)})`, 'warning');
+            } else {
+                alert(`La seña no puede ser mayor al total del encargo`);
+            }
+            const depositInput = document.getElementById('no-deposit');
+            if (depositInput) {
+                depositInput.focus();
+                depositInput.style.borderColor = 'var(--red)';
+            }
+            return;
+        }
+
+        if (depositAmount < 0) {
+            if (typeof Toast !== 'undefined') Toast.show('La seña no puede ser un valor negativo', 'warning');
+            return;
+        }
+
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '⏳ Guardando encargo...';
