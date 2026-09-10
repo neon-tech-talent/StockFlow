@@ -44,38 +44,221 @@ const DB = {
       category_id: p.categoryId || null, 
       sell_price: parseFloat(p.sellPrice) || 0, 
       cost_price: parseFloat(p.costPrice) || 0, 
-      stock: parseFloat(p.stock) || 0, 
       unit: p.unit || 'Unidades' 
     };
     if (p.id) {
+      // Bloqueo de edición directa de stock: al editar un producto existente NO se sobreescribe el stock
       const { data } = await this.client.from('products').update(obj).eq('id', p.id).eq('admin_id', this._adminId()).select().single();
       return data;
     } else {
-      const { data } = await this.client.from('products').insert({ ...obj, admin_id: this._adminId() }).select().single();
+      const initialStock = parseFloat(p.stock) || 0;
+      const { data } = await this.client.from('products').insert({ ...obj, stock: initialStock, admin_id: this._adminId() }).select().single();
+      if (data && initialStock > 0) {
+        await this.recordStockMovement({
+          productId: data.id,
+          productName: data.name,
+          type: 'inicial',
+          quantity: initialStock,
+          reason: 'Stock inicial de alta',
+          notes: 'Carga inicial al crear producto',
+          prevStock: 0,
+          newStock: initialStock,
+          unit: data.unit
+        });
+      }
       return data;
     }
   },
   async deleteProduct(id) { await this.client.from('products').delete().eq('id', id).eq('admin_id', this._adminId()); },
   async adjustStock(id, delta) {
     if (!id) return null;
+    const numDelta = parseFloat(delta) || 0;
+    let prevStock = 0;
+    try {
+      const { data: cur } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).maybeSingle();
+      if (cur && cur.stock !== null && cur.stock !== undefined) prevStock = parseFloat(cur.stock) || 0;
+    } catch(e) {}
+
     try {
       const { data: rpcStock, error: rpcErr } = await this.client.rpc('adjust_product_stock_atomic', {
         p_product_id: id,
-        p_delta: parseFloat(delta) || 0
+        p_delta: numDelta
       });
       if (!rpcErr && rpcStock !== null && rpcStock !== undefined) {
-        return { id, stock: rpcStock };
+        return { id, stock: rpcStock, prevStock };
       }
     } catch (e) {}
 
     // Fallback estándar si la función RPC aún no fue creada en Supabase
     const { data } = await this.client.from('products').select('stock').eq('id', id).eq('admin_id', this._adminId()).single();
     if (data) {
-      const newStock = Math.max(0, Math.round(((parseFloat(data.stock) || 0) + parseFloat(delta)) * 1000) / 1000);
+      prevStock = parseFloat(data.stock) || 0;
+      const newStock = Math.max(0, Math.round((prevStock + numDelta) * 1000) / 1000);
       const { data: updated } = await this.client.from('products').update({ stock: newStock }).eq('id', id).eq('admin_id', this._adminId()).select().single();
-      return updated;
+      return { ...(updated || { id, stock: newStock }), prevStock };
     }
     return null;
+  },
+
+  /* ── STOCK MOVEMENTS & AUDIT ── */
+  async recordStockMovement({ productId, productName, type, quantity, reason, notes, prevStock, newStock, unit }) {
+    const aid = this._adminId();
+    if (!aid || !productId) return null;
+    const qty = parseFloat(quantity) || 0;
+    const userName = (typeof Auth !== 'undefined' && Auth.getSession) ? (Auth.getSession()?.user || 'admin') : 'admin';
+    const movementPayload = {
+      admin_id: aid,
+      product_id: productId,
+      product_name: productName || '',
+      type: type || 'ajuste',
+      quantity: qty,
+      reason: reason || (type === 'ingreso' ? 'Reposición' : 'Ajuste de inventario'),
+      notes: notes || '',
+      prev_stock: (prevStock !== undefined && prevStock !== null) ? parseFloat(prevStock) : null,
+      new_stock: (newStock !== undefined && newStock !== null) ? parseFloat(newStock) : null,
+      unit: unit || 'Unidades',
+      user_name: userName,
+      created_at: new Date().toISOString()
+    };
+
+    // 1. Intentar insertar en tabla dedicada 'stock_movements' si existiera
+    try {
+      const { data, error } = await this.client.from('stock_movements').insert(movementPayload).select().maybeSingle();
+      if (!error && data) return data;
+    } catch (e) {}
+
+    // 2. Fallback persistente en 'turnos_audit' (existente en Supabase)
+    try {
+      const auditAction = `STOCK_${(type || 'AJUSTE').toUpperCase()}`;
+      const detailsStr = JSON.stringify({
+        type: movementPayload.type,
+        quantity: movementPayload.quantity,
+        reason: movementPayload.reason,
+        notes: movementPayload.notes,
+        prev_stock: movementPayload.prev_stock,
+        new_stock: movementPayload.new_stock,
+        unit: movementPayload.unit,
+        product_name: movementPayload.product_name,
+        user_name: userName
+      });
+
+      const { data, error } = await this.client.from('turnos_audit').insert({
+        admin_id: aid,
+        user_name: userName,
+        action: auditAction,
+        entity_name: 'products',
+        entity_id: productId,
+        details: detailsStr,
+        created_at: movementPayload.created_at
+      }).select().maybeSingle();
+
+      return data;
+    } catch (err) {
+      console.warn("Fallo guardado de movimiento de stock en auditoría:", err);
+    }
+    return null;
+  },
+
+  async getProductStockHistory(productId) {
+    const aid = this._adminId();
+    if (!aid || !productId) return [];
+
+    const movements = [];
+
+    // 1. Intentar desde stock_movements
+    try {
+      const { data: dedicated } = await this.client.from('stock_movements')
+        .select('*')
+        .eq('admin_id', aid)
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false });
+      if (dedicated && dedicated.length) {
+        return dedicated;
+      }
+    } catch (e) {}
+
+    // 2. Obtener desde turnos_audit
+    try {
+      const { data: audits } = await this.client.from('turnos_audit')
+        .select('*')
+        .eq('admin_id', aid)
+        .eq('entity_name', 'products')
+        .eq('entity_id', productId)
+        .order('created_at', { ascending: false });
+
+      if (audits && audits.length) {
+        audits.forEach(a => {
+          let parsed = {};
+          try {
+            parsed = typeof a.details === 'string' ? JSON.parse(a.details) : (a.details || {});
+          } catch (err) {
+            parsed = { reason: a.details };
+          }
+
+          let mType = parsed.type;
+          if (!mType) {
+            if (a.action.includes('INGRESO')) mType = 'ingreso';
+            else if (a.action.includes('DESCUENTO')) mType = 'descuento';
+            else if (a.action.includes('VENTA')) mType = 'venta';
+            else if (a.action.includes('ANULACION')) mType = 'anulacion';
+            else if (a.action.includes('INICIAL')) mType = 'inicial';
+            else mType = 'ajuste';
+          }
+
+          movements.push({
+            id: a.id,
+            type: mType,
+            quantity: parseFloat(parsed.quantity) || 0,
+            reason: parsed.reason || a.action,
+            notes: parsed.notes || '',
+            prev_stock: parsed.prev_stock !== undefined ? parsed.prev_stock : null,
+            new_stock: parsed.new_stock !== undefined ? parsed.new_stock : null,
+            unit: parsed.unit || '',
+            user_name: a.user_name || parsed.user_name || 'admin',
+            created_at: a.created_at
+          });
+        });
+      }
+    } catch (e) {
+      console.error("Error al obtener auditoría de producto:", e);
+    }
+
+    // 3. Incluir ventas históricas de sale_items si aún no estaban en la auditoría
+    try {
+      const { data: saleItems } = await this.client.from('sale_items')
+        .select('id, sale_id, quantity, product_name, sales(id, created_at, client_name, voided)')
+        .eq('admin_id', aid)
+        .eq('product_id', productId);
+
+      if (saleItems && saleItems.length) {
+        saleItems.forEach(si => {
+          const sale = si.sales;
+          const saleDate = sale?.created_at;
+          const shortId = si.sale_id ? si.sale_id.slice(-4) : '';
+          const alreadyLogged = movements.some(m => m.type === 'venta' && shortId && m.reason && m.reason.includes(shortId));
+          if (!alreadyLogged && saleDate) {
+            movements.push({
+              id: 'si_' + si.id,
+              type: sale?.voided ? 'anulacion' : 'venta',
+              quantity: parseFloat(si.quantity) || 0,
+              reason: `Venta #${shortId} (${sale?.client_name || 'Consumidor Final'})` + (sale?.voided ? ' (Anulada)' : ''),
+              notes: 'Venta registrada',
+              prev_stock: null,
+              new_stock: null,
+              unit: '',
+              user_name: 'admin',
+              created_at: saleDate
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Fallback historial sale_items:", e);
+    }
+
+    // Ordenar cronológicamente descendente
+    movements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return movements;
   },
 
   /* ── CLIENTS ── */
@@ -159,7 +342,19 @@ const DB = {
 
     for (const it of items) { 
       if (it.productId) {
-        await this.adjustStock(it.productId, -(parseFloat(it.quantity) || 0)); 
+        const qtyToAdjust = parseFloat(it.quantity) || 0;
+        const adj = await this.adjustStock(it.productId, -qtyToAdjust); 
+        await this.recordStockMovement({
+          productId: it.productId,
+          productName: it.productName,
+          type: 'venta',
+          quantity: qtyToAdjust,
+          reason: `Venta #${saleId.slice(-4)} (${sale.clientName || 'Consumidor Final'})`,
+          notes: sale.paymentType ? `Pago: ${(typeof Utils !== 'undefined' && Utils.paymentLabel) ? Utils.paymentLabel(sale.paymentType) : sale.paymentType}` : '',
+          prevStock: adj?.prevStock,
+          newStock: adj?.stock,
+          unit: it.unit
+        });
       }
     }
 
@@ -198,7 +393,18 @@ const DB = {
     const items = await this.getSaleItems(saleId);
     for (const it of items) { 
       if (it.product_id) {
-        await this.adjustStock(it.product_id, parseFloat(it.quantity) || 0); 
+        const qtyToAdjust = parseFloat(it.quantity) || 0;
+        const adj = await this.adjustStock(it.product_id, qtyToAdjust); 
+        await this.recordStockMovement({
+          productId: it.product_id,
+          productName: it.product_name,
+          type: 'anulacion',
+          quantity: qtyToAdjust,
+          reason: `Anulación Venta #${saleId.slice(-4)}`,
+          notes: '',
+          prevStock: adj?.prevStock,
+          newStock: adj?.stock
+        });
       }
     }
 

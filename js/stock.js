@@ -277,9 +277,34 @@ const StockModule = {
         box.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th>Producto</th><th>Categoría</th><th>P. Venta</th><th>P. Costo</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>
           ${rows.map(p => {
             const cat = cats.find(c => c.id === p.category_id);
-            return `<tr><td><strong>${Utils.escHtml(p.name)}</strong></td><td>${cat?Utils.escHtml(cat.name):'-'}</td><td>${Utils.currency(p.sell_price)}</td><td>${Utils.currency(p.cost_price)}</td>
-            <td><span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}">${p.stock} ${Utils.escHtml(Utils.unitAbbr(p.unit))}</span></td>
-            <td><button class="btn-icon" aria-label="Editar ${Utils.escHtml(p.name)}" onclick="StockModule.openProductModal('${p.id}')">✏️</button><button class="btn-icon danger" aria-label="Eliminar ${Utils.escHtml(p.name)}" onclick="StockModule.delProduct('${p.id}')">🗑️</button></td></tr>`;
+            const isLow = p.stock > 0 && p.stock < 5;
+            const isOut = p.stock <= 0;
+            const badgeClass = isOut ? 'badge-danger' : (isLow ? 'badge-warning' : 'badge-success');
+            const unitText = Utils.escHtml(Utils.unitAbbr(p.unit));
+            return `<tr>
+              <td><strong>${Utils.escHtml(p.name)}</strong></td>
+              <td>${cat ? Utils.escHtml(cat.name) : '-'}</td>
+              <td>${Utils.currency(p.sell_price)}</td>
+              <td>${Utils.currency(p.cost_price)}</td>
+              <td>
+                <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:nowrap;">
+                  <span class="badge ${badgeClass} badge-stock-interactive" 
+                        title="Ver historial de stock de ${Utils.escHtml(p.name)}" 
+                        onclick="StockModule.openHistoryModal('${p.id}')">
+                    ${p.stock} ${unitText}
+                  </span>
+                  <button class="btn-stock-quick btn-stock-add" title="Agregar stock a ${Utils.escHtml(p.name)}" onclick="StockModule.openAdjustModal('${p.id}', 'add')">➕</button>
+                  <button class="btn-stock-quick btn-stock-deduct" title="Descontar stock a ${Utils.escHtml(p.name)}" onclick="StockModule.openAdjustModal('${p.id}', 'deduct')">➖</button>
+                </div>
+              </td>
+              <td>
+                <div style="display:flex; align-items:center; gap:0.25rem;">
+                  <button class="btn-icon" title="Ver Historial de Stock" aria-label="Historial ${Utils.escHtml(p.name)}" onclick="StockModule.openHistoryModal('${p.id}')">📋</button>
+                  <button class="btn-icon" aria-label="Editar ${Utils.escHtml(p.name)}" title="Editar Producto" onclick="StockModule.openProductModal('${p.id}')">✏️</button>
+                  <button class="btn-icon danger" aria-label="Eliminar ${Utils.escHtml(p.name)}" title="Eliminar Producto" onclick="StockModule.delProduct('${p.id}')">🗑️</button>
+                </div>
+              </td>
+            </tr>`;
           }).join('')}</tbody></table></div>`;
     },
 
@@ -303,8 +328,26 @@ const StockModule = {
             <input name="costPrice" type="number" step="0.01" min="0" class="form-input" required value="${p?.cost_price || ''}"></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Stock *</label>
-            <input name="stock" type="number" step="any" min="0" class="form-input" required value="${p?.stock ?? ''}"></div>
+          ${p ? `
+          <div class="form-group">
+            <label>Stock Actual <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(Bloqueado para edición directa)</span></label>
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:0.6rem 0.85rem; background:rgba(0,0,0,0.25); border:1px solid var(--border-subtle); border-radius:var(--radius-sm);">
+              <span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}" style="font-size:0.95rem; font-weight:600;">
+                ${p.stock} ${Utils.escHtml(Utils.unitAbbr(p.unit))}
+              </span>
+              <div style="display:flex; gap:0.4rem;">
+                <button type="button" class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.78rem; color:var(--green); border-color:rgba(16,185,129,0.3);" onclick="Modal.close(); StockModule.openAdjustModal('${p.id}', 'add')">➕ Agregar</button>
+                <button type="button" class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.78rem; color:var(--red); border-color:rgba(244,63,94,0.3);" onclick="Modal.close(); StockModule.openAdjustModal('${p.id}', 'deduct')">➖ Descontar</button>
+              </div>
+            </div>
+            <p class="text-muted" style="font-size:0.75rem; margin-top:0.35rem;">ℹ️ El stock no se modifica arbitrariamente. Usa ➕ Agregar o ➖ Descontar con su motivo.</p>
+          </div>
+          ` : `
+          <div class="form-group"><label>Stock Inicial</label>
+            <input name="stock" type="number" step="any" min="0" class="form-input" placeholder="0" value="0">
+            <p class="text-muted" style="font-size:0.75rem; margin-top:0.25rem;">Se registrará automáticamente como stock inicial.</p>
+          </div>
+          `}
           <div class="form-group"><label>Unidad de Medida *</label>
             <select name="unit" class="form-input" required>
               <option value="Unidades" ${(!p || !p.unit || p.unit === 'Unidades' || p.unit === 'unidades') ? 'selected' : ''}>Unidades</option>
@@ -323,10 +366,311 @@ const StockModule = {
 
     async saveProduct(e, id) {
         e.preventDefault(); const f = e.target;
-        await DB.saveProduct({ id: id||undefined, name: f.name.value.trim(), categoryId: f.categoryId.value, sellPrice: parseFloat(f.sellPrice.value), costPrice: parseFloat(f.costPrice.value), stock: parseFloat(f.stock.value) || 0, unit: f.unit.value });
+        const payload = {
+            id: id || undefined,
+            name: f.name.value.trim(),
+            categoryId: f.categoryId.value,
+            sellPrice: parseFloat(f.sellPrice.value),
+            costPrice: parseFloat(f.costPrice.value),
+            unit: f.unit.value
+        };
+        if (!id && f.stock) {
+            payload.stock = parseFloat(f.stock.value) || 0;
+        }
+        await DB.saveProduct(payload);
         Modal.close();
         if (typeof Toast !== 'undefined') Toast.show(id ? 'Producto actualizado' : 'Nuevo producto creado', 'success');
         await this._renderProducts(document.getElementById('stock-tab-content'));
+    },
+
+    async openAdjustModal(productId, defaultType = 'deduct') {
+        const prods = await DB.getProducts();
+        const p = prods.find(x => x.id === productId);
+        if (!p) return;
+
+        const isDeduct = defaultType === 'deduct';
+        const unitAbbr = Utils.escHtml(Utils.unitAbbr(p.unit));
+        const step = Utils.unitStep(p.unit);
+
+        Modal.open(`
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+        <div>
+          <h2 class="modal-title" style="margin:0;">Movimiento de Stock</h2>
+          <p class="text-muted" style="font-size:0.85rem; margin:0.15rem 0 0;">${Utils.escHtml(p.name)}</p>
+        </div>
+        <div>
+          <span class="badge ${p.stock <= 0 ? 'badge-danger' : (p.stock < 5 ? 'badge-warning' : 'badge-success')}" style="font-size:0.9rem;">
+            Stock actual: <strong>${p.stock} ${unitAbbr}</strong>
+          </span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.5rem; margin-bottom:1.25rem;">
+        <button type="button" id="tab-adjust-add" class="btn ${!isDeduct ? 'btn-primary' : 'btn-outline'}" style="flex:1; justify-content:center; ${!isDeduct ? 'background:var(--green); border-color:var(--green);' : 'color:var(--green);'}" onclick="StockModule.openAdjustModal('${productId}', 'add')">
+          ➕ Agregar Stock
+        </button>
+        <button type="button" id="tab-adjust-deduct" class="btn ${isDeduct ? 'btn-primary' : 'btn-outline'}" style="flex:1; justify-content:center; ${isDeduct ? 'background:var(--red); border-color:var(--red);' : 'color:var(--red);'}" onclick="StockModule.openAdjustModal('${productId}', 'deduct')">
+          ➖ Descontar Stock
+        </button>
+      </div>
+
+      <form id="form-stock-adjust" onsubmit="StockModule.saveStockAdjustment(event, '${productId}', '${isDeduct ? 'deduct' : 'add'}')">
+        <div class="form-group">
+          <label>Cantidad a ${isDeduct ? 'descontar' : 'agregar'} (${unitAbbr}) *</label>
+          <input name="quantity" type="number" step="${step}" min="0.001" class="form-input" required placeholder="0" autofocus>
+        </div>
+
+        ${isDeduct ? `
+        <div class="form-group">
+          <label style="color:var(--red); font-weight:600;">Motivo de la baja * (Obligatorio)</label>
+          <select name="reason" id="adjust-reason" class="form-input" required onchange="StockModule.onReasonChange(this)">
+            <option value="">-- Selecciona el motivo de la baja --</option>
+            <option value="Merma / Rotura">Merma / Rotura</option>
+            <option value="Vencimiento / Descarte">Vencimiento / Descarte</option>
+            <option value="Consumo interno / Degustación">Consumo interno / Degustación</option>
+            <option value="Error de conteo / Ajuste inventario">Error de conteo / Ajuste inventario</option>
+            <option value="Devolución a proveedor">Devolución a proveedor</option>
+            <option value="Otro motivo">Otro motivo (especificar)...</option>
+          </select>
+        </div>
+        <div class="form-group" id="adjust-custom-reason-group">
+          <label>Detalle o aclaración <span id="lbl-reason-req" style="color:var(--text-muted); font-size:0.75rem;">(Opcional)</span></label>
+          <input name="notes" id="adjust-notes" class="form-input" placeholder="Ej: Se cayó frasco, lote 12, etc.">
+        </div>
+        ` : `
+        <div class="form-group">
+          <label>Motivo / Origen del ingreso</label>
+          <select name="reason" class="form-input">
+            <option value="Reposición de mercadería / Compra">Reposición de mercadería / Compra</option>
+            <option value="Ajuste de inventario (sobrante)">Ajuste de inventario (sobrante)</option>
+            <option value="Devolución de cliente">Devolución de cliente</option>
+            <option value="Producción propia">Producción propia</option>
+            <option value="Otro motivo">Otro motivo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Observaciones / Factura / Remito <span style="color:var(--text-muted); font-size:0.75rem;">(Opcional)</span></label>
+          <input name="notes" class="form-input" placeholder="Ej: Factura A #001-492, Proveedor X...">
+        </div>
+        `}
+
+        <div class="modal-actions" style="margin-top:1.5rem;">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+          <button type="submit" class="btn ${isDeduct ? 'btn-danger' : 'btn-primary'}" style="${!isDeduct ? 'background:var(--green); border-color:var(--green);' : ''}">
+            ${isDeduct ? 'Confirmar Descuento' : 'Confirmar Ingreso'}
+          </button>
+        </div>
+      </form>`);
+    },
+
+    onReasonChange(sel) {
+        const notesInput = document.getElementById('adjust-notes');
+        const reqLbl = document.getElementById('lbl-reason-req');
+        if (sel.value === 'Otro motivo') {
+            if (notesInput) {
+                notesInput.required = true;
+                notesInput.placeholder = 'Especifica el motivo detallado aquí (Obligatorio)...';
+                notesInput.focus();
+            }
+            if (reqLbl) {
+                reqLbl.textContent = '(Obligatorio)';
+                reqLbl.style.color = 'var(--red)';
+            }
+        } else {
+            if (notesInput) {
+                notesInput.required = false;
+                notesInput.placeholder = 'Ej: Se cayó frasco, lote 12, etc.';
+            }
+            if (reqLbl) {
+                reqLbl.textContent = '(Opcional)';
+                reqLbl.style.color = 'var(--text-muted)';
+            }
+        }
+    },
+
+    async saveStockAdjustment(e, productId, type) {
+        e.preventDefault();
+        const f = e.target;
+        const qty = parseFloat(f.quantity.value);
+        if (isNaN(qty) || qty <= 0) {
+            if (typeof Toast !== 'undefined') Toast.show('La cantidad debe ser mayor a 0.', 'warning');
+            return;
+        }
+
+        const prods = await DB.getProducts();
+        const p = prods.find(x => x.id === productId);
+        if (!p) {
+            if (typeof Toast !== 'undefined') Toast.show('Producto no encontrado.', 'danger');
+            return;
+        }
+
+        const isDeduct = type === 'deduct';
+        let reason = f.reason ? f.reason.value.trim() : '';
+        const notes = f.notes ? f.notes.value.trim() : '';
+
+        if (isDeduct) {
+            if (!reason) {
+                if (typeof Toast !== 'undefined') Toast.show('Debes seleccionar un motivo para descontar stock.', 'warning');
+                return;
+            }
+            if (reason === 'Otro motivo') {
+                if (!notes) {
+                    if (typeof Toast !== 'undefined') Toast.show('Por favor especifica el motivo en el campo de detalle.', 'warning');
+                    return;
+                }
+                reason = notes;
+            }
+        } else {
+            if (!reason) reason = 'Reposición de mercadería / Compra';
+        }
+
+        const delta = isDeduct ? -qty : qty;
+        if (isDeduct && p.stock < qty) {
+            const unitAbbr = Utils.unitAbbr(p.unit);
+            const ok = confirm(`El stock actual es de ${p.stock} ${unitAbbr}. Al descontar ${qty} ${unitAbbr} quedará en saldo negativo (${Math.round((p.stock - qty)*1000)/1000} ${unitAbbr}).\n\n¿Confirmar de todas formas?`);
+            if (!ok) return;
+        }
+
+        const adj = await DB.adjustStock(productId, delta);
+        await DB.recordStockMovement({
+            productId,
+            productName: p.name,
+            type: isDeduct ? 'descuento' : 'ingreso',
+            quantity: qty,
+            reason,
+            notes,
+            prevStock: adj?.prevStock,
+            newStock: adj?.stock,
+            unit: p.unit
+        });
+
+        Modal.close();
+        if (typeof Toast !== 'undefined') {
+            Toast.show(isDeduct ? `Se descontaron ${qty} ${Utils.unitAbbr(p.unit)} correctamente.` : `Se agregaron ${qty} ${Utils.unitAbbr(p.unit)} con éxito.`, 'success');
+        }
+        await this._renderTable();
+    },
+
+    async openHistoryModal(productId) {
+        const prods = await DB.getProducts();
+        const p = prods.find(x => x.id === productId);
+        if (!p) return;
+
+        const unitAbbr = Utils.escHtml(Utils.unitAbbr(p.unit));
+
+        Modal.open(`
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem; flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <h2 class="modal-title" style="margin-bottom:0.25rem;">Historial de Stock</h2>
+          <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <strong style="color:var(--text-main); font-size:1.15rem;">${Utils.escHtml(p.name)}</strong>
+            <span class="badge ${p.stock<=0?'badge-danger':p.stock<5?'badge-warning':'badge-success'}" style="font-size:0.9rem;">
+              Stock actual: ${p.stock} ${unitAbbr}
+            </span>
+          </div>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="btn btn-outline" style="color:var(--green); border-color:rgba(16,185,129,0.3); font-size:0.85rem;" onclick="Modal.close(); StockModule.openAdjustModal('${p.id}', 'add')">➕ Agregar</button>
+          <button class="btn btn-outline" style="color:var(--red); border-color:rgba(244,63,94,0.3); font-size:0.85rem;" onclick="Modal.close(); StockModule.openAdjustModal('${p.id}', 'deduct')">➖ Descontar</button>
+        </div>
+      </div>
+      <div id="history-content-box">${Utils.skeleton(3)}</div>
+      <div class="modal-actions" style="margin-top:1.25rem;">
+        <button type="button" class="btn btn-outline" onclick="Modal.close()">Cerrar</button>
+      </div>`);
+
+        const history = await DB.getProductStockHistory(productId);
+        const container = document.getElementById('history-content-box');
+        if (!container) return;
+
+        let totalIngresos = 0;
+        let totalDescuentos = 0;
+        let totalVentas = 0;
+
+        history.forEach(m => {
+            const q = parseFloat(m.quantity) || 0;
+            if (m.type === 'ingreso' || m.type === 'inicial') totalIngresos += q;
+            else if (m.type === 'descuento') totalDescuentos += q;
+            else if (m.type === 'venta') totalVentas += q;
+        });
+
+        totalIngresos = Math.round(totalIngresos * 1000) / 1000;
+        totalDescuentos = Math.round(totalDescuentos * 1000) / 1000;
+        totalVentas = Math.round(totalVentas * 1000) / 1000;
+
+        const typeBadges = {
+            ingreso: `<span class="badge badge-success" style="font-size:0.75rem;">🟢 Ingreso</span>`,
+            descuento: `<span class="badge badge-danger" style="font-size:0.75rem;">🔴 Baja / Merma</span>`,
+            venta: `<span class="badge" style="background:rgba(56,189,248,0.15); color:var(--blue); border:1px solid rgba(56,189,248,0.3); font-size:0.75rem;">🔵 Venta</span>`,
+            anulacion: `<span class="badge badge-warning" style="font-size:0.75rem;">🟡 Anulación</span>`,
+            inicial: `<span class="badge" style="background:rgba(212,175,55,0.15); color:var(--accent); border:1px solid var(--border); font-size:0.75rem;">⚪ Stock Inicial</span>`,
+            ajuste: `<span class="badge" style="background:rgba(255,255,255,0.1); color:var(--text-secondary); font-size:0.75rem;">⚙ Ajuste</span>`
+        };
+
+        container.innerHTML = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:0.6rem; margin-bottom:1rem;">
+        <div style="padding:0.55rem 0.75rem; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:var(--radius-sm);">
+          <span style="font-size:0.72rem; color:var(--text-muted); display:block;">Total Ingresos</span>
+          <strong style="color:var(--green); font-size:0.95rem;">+${totalIngresos} ${unitAbbr}</strong>
+        </div>
+        <div style="padding:0.55rem 0.75rem; background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.2); border-radius:var(--radius-sm);">
+          <span style="font-size:0.72rem; color:var(--text-muted); display:block;">Total Bajas / Mermas</span>
+          <strong style="color:var(--red); font-size:0.95rem;">-${totalDescuentos} ${unitAbbr}</strong>
+        </div>
+        <div style="padding:0.55rem 0.75rem; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:var(--radius-sm);">
+          <span style="font-size:0.72rem; color:var(--text-muted); display:block;">Total Ventas</span>
+          <strong style="color:var(--blue); font-size:0.95rem;">-${totalVentas} ${unitAbbr}</strong>
+        </div>
+      </div>
+
+      ${history.length ? `
+      <div class="table-scroll" style="max-height:360px; overflow-y:auto; border:1px solid var(--border-subtle); border-radius:var(--radius-sm);">
+        <table class="data-table" style="margin:0; font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th style="padding:0.55rem 0.7rem;">Fecha</th>
+              <th style="padding:0.55rem 0.7rem;">Tipo</th>
+              <th style="padding:0.55rem 0.7rem;">Cant.</th>
+              <th style="padding:0.55rem 0.7rem;">Motivo / Detalle</th>
+              <th style="padding:0.55rem 0.7rem;">Stock Resultante</th>
+              <th style="padding:0.55rem 0.7rem;">Usuario</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${history.map(m => {
+                const isPositive = m.type === 'ingreso' || m.type === 'anulacion' || m.type === 'inicial';
+                const sign = isPositive ? '+' : '-';
+                const colorClass = isPositive ? 'text-success' : 'text-danger';
+                const badgeHtml = typeBadges[m.type] || typeBadges.ajuste;
+                const dateStr = Utils.date(m.created_at);
+                const stockResult = (m.prev_stock !== null && m.new_stock !== null && m.prev_stock !== undefined && m.new_stock !== undefined) 
+                  ? `<span style="font-size:0.8rem; color:var(--text-muted);">${m.prev_stock} ➔</span> <strong>${m.new_stock}</strong>`
+                  : (m.new_stock !== null && m.new_stock !== undefined ? `<strong>${m.new_stock}</strong>` : '-');
+
+                return `<tr>
+                  <td style="white-space:nowrap; padding:0.55rem 0.7rem; font-size:0.8rem;">${dateStr}</td>
+                  <td style="white-space:nowrap; padding:0.55rem 0.7rem;">${badgeHtml}</td>
+                  <td style="white-space:nowrap; padding:0.55rem 0.7rem;"><strong class="${colorClass}">${sign}${m.quantity} ${unitAbbr}</strong></td>
+                  <td style="padding:0.55rem 0.7rem;">
+                    <div>${Utils.escHtml(m.reason || '-')}</div>
+                    ${m.notes ? `<div class="text-muted" style="font-size:0.75rem; margin-top:2px;">${Utils.escHtml(m.notes)}</div>` : ''}
+                  </td>
+                  <td style="white-space:nowrap; padding:0.55rem 0.7rem;">${stockResult}</td>
+                  <td style="white-space:nowrap; padding:0.55rem 0.7rem; color:var(--text-muted); font-size:0.78rem;">${Utils.escHtml(m.user_name || 'admin')}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ` : `
+      <div style="padding:2.5rem 1rem; text-align:center;">
+        <span style="font-size:2.2rem; display:block; margin-bottom:0.5rem;">📋</span>
+        <strong style="color:var(--text-main); font-size:0.95rem;">Sin movimientos registrados</strong>
+        <p class="text-muted" style="font-size:0.82rem; margin-top:0.35rem;">
+          Los ingresos, descuentos con motivo y ventas quedarán registrados aquí para consultar en cualquier momento.
+        </p>
+      </div>
+      `}`;
     },
 
     async delProduct(id) {

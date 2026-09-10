@@ -455,6 +455,55 @@ body {
   color: var(--red);
 }
 
+.btn-stock-quick {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-xs);
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  user-select: none;
+}
+.btn-stock-quick:hover {
+  transform: translateY(-1px) scale(1.08);
+}
+.btn-stock-add {
+  color: var(--green);
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.1);
+}
+.btn-stock-add:hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: var(--green);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+.btn-stock-deduct {
+  color: var(--red);
+  border-color: rgba(244, 63, 94, 0.3);
+  background: rgba(244, 63, 94, 0.1);
+}
+.btn-stock-deduct:hover {
+  background: rgba(244, 63, 94, 0.25);
+  border-color: var(--red);
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.25);
+}
+
+.badge-stock-interactive {
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  user-select: none;
+}
+.badge-stock-interactive:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+
 .btn-row { 
   display: flex; 
   gap: 0.6rem; 
