@@ -417,7 +417,7 @@ const StockModule = {
       <form id="form-stock-adjust" onsubmit="StockModule.saveStockAdjustment(event, '${productId}', '${isDeduct ? 'deduct' : 'add'}')">
         <div class="form-group">
           <label>Cantidad a ${isDeduct ? 'descontar' : 'agregar'} (${unitAbbr}) *</label>
-          <input name="quantity" type="number" step="${step}" min="0.001" class="form-input" required placeholder="0" autofocus>
+          <input name="quantity" type="number" step="any" min="0.001" class="form-input" required placeholder="0" autofocus>
         </div>
 
         ${isDeduct ? `
