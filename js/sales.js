@@ -192,7 +192,24 @@ const SalesModule = {
             </div>
           </div>
 
-          <div id="exp-inputs-container" style="margin-bottom:1rem;"></div>
+          <div id="exp-inputs-container" style="margin-bottom:0.75rem;"></div>
+
+          <div class="form-row" style="margin-bottom:1rem;">
+            <div class="form-group" style="flex:1;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="font-size:0.82rem; font-weight:600;">⏰ Hora Desde:</label>
+                <small class="text-muted" style="font-size:0.7rem; cursor:pointer;" onclick="document.getElementById('exp-time-start').value=''; SalesModule.updateExportPreview();" title="Borrar filtro de hora">✕ Limpiar</small>
+              </div>
+              <input type="time" id="exp-time-start" class="form-input" onchange="SalesModule.updateExportPreview()">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="font-size:0.82rem; font-weight:600;">⏰ Hora Hasta:</label>
+                <small class="text-muted" style="font-size:0.7rem; cursor:pointer;" onclick="document.getElementById('exp-time-end').value=''; SalesModule.updateExportPreview();" title="Borrar filtro de hora">✕ Limpiar</small>
+              </div>
+              <input type="time" id="exp-time-end" class="form-input" onchange="SalesModule.updateExportPreview()">
+            </div>
+          </div>
 
           <div class="form-row" style="margin-bottom:1rem;">
             <div class="form-group" style="flex:1;">
@@ -310,6 +327,9 @@ const SalesModule = {
         const statusFilter = document.getElementById('exp-filter-status')?.value || 'completed';
         const payFilter = document.getElementById('exp-filter-pay')?.value || 'all';
 
+        const timeStart = document.getElementById('exp-time-start')?.value || '';
+        const timeEnd = document.getElementById('exp-time-end')?.value || '';
+
         return (allSales || []).filter(s => {
             if (!s) return false;
             // Filtro de estado
@@ -324,19 +344,26 @@ const SalesModule = {
 
             if (periodType === 'day') {
                 const dayVal = document.getElementById('exp-input-day')?.value || Utils.todayStr();
-                return saleDateStr === dayVal;
+                if (saleDateStr !== dayVal) return false;
             } else if (periodType === 'range') {
                 const startVal = document.getElementById('exp-input-start')?.value || '';
                 const endVal = document.getElementById('exp-input-end')?.value || '';
                 if (startVal && saleDateStr < startVal) return false;
                 if (endVal && saleDateStr > endVal) return false;
-                return true;
             } else if (periodType === 'month') {
                 const mVal = parseInt(document.getElementById('exp-input-month')?.value ?? new Date().getMonth(), 10);
                 const yVal = parseInt(document.getElementById('exp-input-year')?.value ?? new Date().getFullYear(), 10);
                 const ym = Utils.getArgentinaYearMonth(new Date(s.created_at));
-                return ym.month === mVal && ym.year === yVal;
+                if (ym.month !== mVal || ym.year !== yVal) return false;
             }
+
+            // Filtro por horario en hora local argentina (formato HH:mm)
+            if (timeStart || timeEnd) {
+                const saleTimeStr = Utils.time(s.created_at);
+                if (timeStart && saleTimeStr < timeStart) return false;
+                if (timeEnd && saleTimeStr > timeEnd) return false;
+            }
+
             return true;
         });
     },
@@ -403,7 +430,18 @@ const SalesModule = {
                 fileSuffix = `mes_${String(m).padStart(2, '0')}_${y}`;
             }
 
-            const filename = `ventas_${fileSuffix}_${detailType === 'items' ? 'detallado' : 'resumen'}.csv`;
+            const timeStart = document.getElementById('exp-time-start')?.value || '';
+            const timeEnd = document.getElementById('exp-time-end')?.value || '';
+            let timeSuffix = '';
+            if (timeStart && timeEnd) {
+                timeSuffix = `_${timeStart.replace(':', 'hs')}_a_${timeEnd.replace(':', 'hs')}`;
+            } else if (timeStart) {
+                timeSuffix = `_desde_${timeStart.replace(':', 'hs')}`;
+            } else if (timeEnd) {
+                timeSuffix = `_hasta_${timeEnd.replace(':', 'hs')}`;
+            }
+
+            const filename = `ventas_${fileSuffix}${timeSuffix}_${detailType === 'items' ? 'detallado' : 'resumen'}.csv`;
             let rows = [];
 
             if (detailType === 'items') {
