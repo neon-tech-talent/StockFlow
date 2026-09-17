@@ -236,8 +236,8 @@ const SalesModule = {
           <div class="form-group" style="margin-bottom:1.25rem;">
             <label style="font-size:0.82rem; font-weight:600;">Nivel de Detalle del Archivo:</label>
             <select id="exp-detail-type" class="form-input">
-              <option value="summary" selected>📄 Resumen por Venta (1 fila por venta con totales y medios de pago)</option>
-              <option value="items">📦 Detallado por Producto (1 fila por cada producto vendido, cantidades y precios)</option>
+              <option value="summary" selected>📄 Resumen por Venta (incluye productos vendidos, medios de pago y totales)</option>
+              <option value="items">📦 Detallado por Producto (1 fila por cada ítem vendido con cantidades y precios)</option>
             </select>
           </div>
 
@@ -444,31 +444,31 @@ const SalesModule = {
             const filename = `ventas_${fileSuffix}${timeSuffix}_${detailType === 'items' ? 'detallado' : 'resumen'}.csv`;
             let rows = [];
 
+            // Obtener items de las ventas seleccionadas para incluir productos y resumen
+            const saleIds = matching.map(s => s.id);
+            let allItems = [];
+            try {
+                if (saleIds.length <= 100) {
+                    const { data } = await DB.client.from('sale_items').select('*').in('sale_id', saleIds).eq('admin_id', DB._adminId());
+                    allItems = data || [];
+                } else {
+                    for (let i = 0; i < saleIds.length; i += 100) {
+                        const chunk = saleIds.slice(i, i + 100);
+                        const { data } = await DB.client.from('sale_items').select('*').in('sale_id', chunk).eq('admin_id', DB._adminId());
+                        if (data) allItems.push(...data);
+                    }
+                }
+            } catch (e) {
+                console.warn("Fallo consulta selectiva de sale_items, recurriendo a getSaleItems():", e);
+                allItems = await DB.getSaleItems();
+            }
+
             if (detailType === 'items') {
                 rows.push([
                     'Nro Venta', 'Fecha', 'Hora', 'Cliente', 'Producto', 
                     'Cantidad', 'Precio Unitario ($)', 'Descuento', 'Subtotal ($)', 
                     'Total Venta ($)', 'Medio de Pago', 'Facturada', 'Estado Venta'
                 ]);
-
-                // Obtener items de las ventas seleccionadas
-                const saleIds = matching.map(s => s.id);
-                let allItems = [];
-                try {
-                    if (saleIds.length <= 100) {
-                        const { data } = await DB.client.from('sale_items').select('*').in('sale_id', saleIds).eq('admin_id', DB._adminId());
-                        allItems = data || [];
-                    } else {
-                        for (let i = 0; i < saleIds.length; i += 100) {
-                            const chunk = saleIds.slice(i, i + 100);
-                            const { data } = await DB.client.from('sale_items').select('*').in('sale_id', chunk).eq('admin_id', DB._adminId());
-                            if (data) allItems.push(...data);
-                        }
-                    }
-                } catch (e) {
-                    console.warn("Fallo consulta selectiva de sale_items, recurriendo a getSaleItems():", e);
-                    allItems = await DB.getSaleItems();
-                }
 
                 matching.forEach(s => {
                     const sItems = allItems.filter(it => it.sale_id === s.id);
@@ -531,11 +531,16 @@ const SalesModule = {
                 });
             } else {
                 rows.push([
-                    'Nro Venta', 'Fecha', 'Hora', 'Cliente', 
+                    'Nro Venta', 'Fecha', 'Hora', 'Cliente', 'Productos Vendidos',
                     'Total ($)', 'Medio de Pago', 'Facturada', 'Estado'
                 ]);
 
                 matching.forEach(s => {
+                    const sItems = allItems.filter(it => it.sale_id === s.id);
+                    const prodsList = sItems.length > 0 
+                        ? sItems.map(it => `${it.quantity}x ${it.product_name}`).join(', ')
+                        : 'Sin detalle registrado';
+
                     const fecha = Utils.dateShort(s.created_at);
                     const hora = Utils.time(s.created_at);
                     const cliente = s.client_name || 'Consumidor Final';
@@ -549,6 +554,7 @@ const SalesModule = {
                         fecha,
                         hora,
                         cliente,
+                        prodsList,
                         total,
                         pago,
                         facturada,
@@ -556,6 +562,65 @@ const SalesModule = {
                     ]);
                 });
             }
+
+            // ── CÁLCULO DE TOTALES DEL PERÍODO Y CONSOLIDADO DE PRODUCTOS VENDIDOS ──
+            let totalPeriodo = 0;
+            let totalUnidadesPeriodo = 0;
+            const prodSummary = {};
+
+            matching.forEach(s => {
+                if (!s.voided) {
+                    totalPeriodo += (parseFloat(s.total) || 0);
+                }
+                const sItems = allItems.filter(it => it.sale_id === s.id);
+                sItems.forEach(it => {
+                    if (!s.voided) {
+                        const pName = it.product_name || 'Producto sin nombre';
+                        const qty = parseFloat(it.quantity) || 0;
+                        let subtotal = qty * (parseFloat(it.unit_price) || 0);
+                        if (it.discount_type === 'percentage') {
+                            subtotal -= subtotal * ((parseFloat(it.discount_value) || 0) / 100);
+                        } else if (it.discount_type === 'amount') {
+                            subtotal -= parseFloat(it.discount_value) || 0;
+                        }
+                        subtotal = Math.max(0, subtotal);
+
+                        if (!prodSummary[pName]) {
+                            prodSummary[pName] = { qty: 0, total: 0 };
+                        }
+                        prodSummary[pName].qty += qty;
+                        prodSummary[pName].total += subtotal;
+                        totalUnidadesPeriodo += qty;
+                    }
+                });
+            });
+
+            // Bloque resumen final en el CSV
+            rows.push([]);
+            rows.push(['=== RESUMEN Y TOTALES DEL PERIODO ===']);
+            rows.push(['Cantidad Total de Ventas', matching.length]);
+            rows.push(['Ventas Completadas', matching.filter(s => !s.voided).length]);
+            rows.push(['Ventas Anuladas', matching.filter(s => s.voided).length]);
+            rows.push(['TOTAL VENDIDO EN EL PERIODO ($)', totalPeriodo.toFixed(2)]);
+            rows.push(['Total de Unidades de Productos Vendidas', totalUnidadesPeriodo]);
+
+            rows.push([]);
+            rows.push(['=== CONSOLIDADO DE PRODUCTOS VENDIDOS EN EL PERIODO ===']);
+            rows.push(['Producto', 'Cantidad Total Vendida', 'Total Recaudado ($)']);
+
+            const prodsSorted = Object.entries(prodSummary).sort((a, b) => b[1].qty - a[1].qty);
+            if (prodsSorted.length > 0) {
+                prodsSorted.forEach(([pName, pData]) => {
+                    rows.push([
+                        pName,
+                        pData.qty,
+                        pData.total.toFixed(2)
+                    ]);
+                });
+            } else {
+                rows.push(['Sin productos detallados registrados en este período', 0, '0.00']);
+            }
+            rows.push(['TOTAL GENERAL', totalUnidadesPeriodo, totalPeriodo.toFixed(2)]);
 
             Utils.exportToCsv(filename, rows);
             Modal.close();
