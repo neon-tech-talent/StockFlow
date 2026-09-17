@@ -167,12 +167,22 @@ const SalesModule = {
     async renderNewSale(el) {
         this.cart = []; this.paymentType = 'efectivo'; this.selectedClientId = null; this.selectedClientName = null;
         const products = await DB.getProducts();
+        const allComboItems = await DB.getAllComboItems();
+
+        // Calcular stock virtual en vivo de cada combo
+        products.forEach(p => {
+            if (p.unit === 'Combo') {
+                const cItems = allComboItems.filter(ci => ci.combo_id === p.id);
+                p.stock = DB.calculateComboStock(p, cItems, products);
+            }
+        });
+
         el.innerHTML = `
       <div class="new-sale-layout">
         <div class="sale-left">
           <div class="card" style="margin-bottom:1rem">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.85rem; flex-wrap:wrap; gap:0.5rem;">
-              <h3 class="card-title" style="margin:0;">📦 Seleccionar Productos</h3>
+              <h3 class="card-title" style="margin:0;">📦 Seleccionar Productos y Combos</h3>
               <button type="button" class="btn btn-sm btn-primary" onclick="SalesModule.openExpressProductModal()" style="gap:0.35rem;">⚡ Carga Express</button>
             </div>
             <input id="ps-q" type="text" placeholder="Buscar por nombre..." class="form-input" style="margin-bottom:.8rem">
@@ -235,18 +245,22 @@ const SalesModule = {
         }
 
         el.innerHTML = list.map(p => {
+            const isCombo = (p.unit === 'Combo');
             const hasStock = p.stock > 0;
-            const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(p.unit) : (p.unit || 'u.');
+            const unitAbbr = isCombo ? 'combos' : (Utils.unitAbbr ? Utils.unitAbbr(p.unit) : (p.unit || 'u.'));
             const stockDisplay = hasStock 
-                ? `<span class="prod-chip-stock">Stock: <strong>${p.stock}</strong> ${Utils.escHtml(unitAbbr)}</span>`
+                ? `<span class="prod-chip-stock">Stock: <strong>${p.stock}</strong> ${unitAbbr}</span>`
                 : `<span class="badge badge-danger" style="font-size:0.7rem;">Sin Stock</span>`;
 
             return `
-              <div class="prod-chip ${!hasStock ? 'prod-no-stock' : ''}" tabindex="0" role="button" aria-label="Agregar ${Utils.escHtml(p.name)}" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
-                <div class="prod-chip-name">${Utils.escHtml(p.name)}</div>
+              <div class="prod-chip ${!hasStock ? 'prod-no-stock' : ''} ${isCombo ? 'prod-chip-combo' : ''}" tabindex="0" role="button" aria-label="Agregar ${Utils.escHtml(p.name)}" onclick="SalesModule.addToCart('${p.id}', '${Utils.escHtml(p.name)}', ${p.sell_price})">
+                <div class="prod-chip-name">
+                  ${isCombo ? '<span class="badge" style="font-size:0.65rem; padding:0.1rem 0.35rem; margin-right:0.3rem; background:rgba(212,175,55,0.2); color:var(--accent); border:1px solid var(--border);">🎁 COMBO</span>' : ''}
+                  ${Utils.escHtml(p.name)}
+                </div>
                 <div class="prod-chip-meta">
                   ${stockDisplay}
-                  <button type="button" class="btn-add-stock" title="Cargar stock (+)" onclick="event.stopPropagation(); SalesModule.openQuickStockModal('${p.id}', '${Utils.escHtml(p.name)}', ${p.stock})">➕</button>
+                  ${!isCombo ? `<button type="button" class="btn-add-stock" title="Cargar stock (+)" onclick="event.stopPropagation(); SalesModule.openQuickStockModal('${p.id}', '${Utils.escHtml(p.name)}', ${p.stock})">➕</button>` : ''}
                 </div>
                 <div class="prod-chip-price">${Utils.currency(p.sell_price)}</div>
               </div>`;
@@ -254,38 +268,115 @@ const SalesModule = {
     },
 
     async addToCart(id, name, price) {
-        const prod = (await DB.getProducts()).find(p => p.id === id);
+        const prods = await DB.getProducts();
+        const prod = prods.find(p => p.id === id);
+        if (!prod) return;
+
+        const allComboItems = await DB.getAllComboItems();
+        const isCombo = (prod.unit === 'Combo');
+
+        if (isCombo) {
+            const comboComponents = allComboItems.filter(ci => ci.combo_id === id);
+            if (!comboComponents.length) {
+                if (typeof Toast !== 'undefined') Toast.show(`El combo "${name}" no tiene productos asignados.`, 'warning');
+                else alert(`El combo "${name}" no tiene productos asignados.`);
+                return;
+            }
+
+            const exist = this.cart.find(x => x.productId === id);
+            const nextComboQty = (exist ? exist.quantity : 0) + 1;
+
+            // Validar stock de cada componente contra el carrito
+            for (const comp of comboComponents) {
+                const compProd = prods.find(p => p.id === comp.product_id);
+                const compStock = parseFloat(compProd ? compProd.stock : 0) || 0;
+                const reqPerCombo = parseFloat(comp.quantity) || 1;
+
+                let alreadyUsed = 0;
+                this.cart.forEach(it => {
+                    if (it.productId === comp.product_id) {
+                        alreadyUsed += it.quantity;
+                    } else if (it.isCombo && it.productId !== id) {
+                        const otherComp = allComboItems.find(ci => ci.combo_id === it.productId && ci.product_id === comp.product_id);
+                        if (otherComp) alreadyUsed += (it.quantity * (parseFloat(otherComp.quantity) || 1));
+                    }
+                });
+
+                const totalNeeded = alreadyUsed + (nextComboQty * reqPerCombo);
+                if (totalNeeded > compStock) {
+                    const compUnit = Utils.unitAbbr ? Utils.unitAbbr(compProd?.unit || 'u.') : 'u.';
+                    const availableNow = Math.max(0, compStock - alreadyUsed);
+                    const msg = `No se puede vender el combo "${name}": stock insuficiente de "${compProd?.name || 'Insumo'}" (Disponible: ${availableNow} ${compUnit}, Requerido: ${reqPerCombo} ${compUnit})`;
+                    if (typeof Toast !== 'undefined') Toast.show(msg, 'danger', 4500);
+                    else alert(msg);
+                    return;
+                }
+            }
+
+            if (exist) {
+                exist.quantity = nextComboQty;
+            } else {
+                const calculatedStock = DB.calculateComboStock(prod, comboComponents, prods);
+                this.cart.push({
+                    productId: id,
+                    productName: name,
+                    unitPrice: price,
+                    costPrice: parseFloat(prod.cost_price) || 0,
+                    quantity: 1,
+                    maxStock: calculatedStock,
+                    unit: 'Combo',
+                    isCombo: true,
+                    discountType: 'none',
+                    discountValue: 0
+                });
+            }
+            if (typeof Toast !== 'undefined') Toast.show(`Combo "${name}" agregado al carrito`, 'info', 1400);
+            this._renderCart();
+            return;
+        }
+
+        // Producto regular
         const stock = parseFloat(prod ? prod.stock : 0) || 0;
         const unit = prod?.unit || 'Unidades';
         const exist = this.cart.find(x => x.productId === id);
 
-        // Determinación de cantidad de incremento según la unidad
+        // Chequear si algún combo ya reservó stock de este producto en el carrito
+        let reservedByCombos = 0;
+        this.cart.forEach(it => {
+            if (it.isCombo) {
+                const comp = allComboItems.find(ci => ci.combo_id === it.productId && ci.product_id === id);
+                if (comp) reservedByCombos += (it.quantity * (parseFloat(comp.quantity) || 1));
+            }
+        });
+
+        const effectiveStock = Math.max(0, stock - reservedByCombos);
         const step = Utils.unitStep ? Utils.unitStep(unit) : 1;
         let delta = 1;
         if (step < 1) {
-            delta = exist ? step : (stock < 1 ? Math.min(step, stock) : 1);
+            delta = exist ? step : (effectiveStock < 1 ? Math.min(step, effectiveStock) : 1);
         }
-        
+
         if (exist) {
             const nextQty = Math.round((exist.quantity + delta) * 1000) / 1000;
-            if (nextQty > stock) {
-                if (typeof Toast !== 'undefined') Toast.show(`No hay stock suficiente de ${name}. Quedan: ${stock} ${unit}`, 'warning');
-                else alert(`No hay stock suficiente de ${name}. Stock disponible: ${stock} ${unit}`);
+            if (nextQty > effectiveStock) {
+                if (typeof Toast !== 'undefined') Toast.show(`No hay stock suficiente de ${name}. Quedan disponibles: ${effectiveStock} ${unit}`, 'warning');
+                else alert(`No hay stock suficiente de ${name}. Stock disponible: ${effectiveStock} ${unit}`);
                 return;
             }
             exist.quantity = nextQty;
         } else {
-            if (stock <= 0) {
+            if (effectiveStock <= 0) {
                 if (typeof Toast !== 'undefined') Toast.show(`No hay stock disponible de ${name}`, 'warning');
                 else alert(`No hay stock disponible de ${name}`);
                 return;
             }
-            const initialQty = Math.min(delta, stock);
+            const initialQty = Math.min(delta, effectiveStock);
             this.cart.push({ 
                 productId: id, productName: name, unitPrice: price, 
                 costPrice: parseFloat(prod?.cost_price) || 0,
                 quantity: initialQty, 
-                maxStock: stock, unit: unit,
+                maxStock: effectiveStock, unit: unit,
+                isCombo: false,
                 discountType: 'none', discountValue: 0
             });
         }
@@ -322,7 +413,7 @@ const SalesModule = {
 
     removeFromCart(idx) { this.cart.splice(idx, 1); this._renderCart(); },
 
-    updateQty(idx, val) {
+    async updateQty(idx, val) {
         const q = parseFloat(val);
         const item = this.cart[idx];
         if (isNaN(q) || q <= 0) {
@@ -330,12 +421,59 @@ const SalesModule = {
             this._renderCart();
             return;
         }
-        if (q > item.maxStock) {
-            if (typeof Toast !== 'undefined') Toast.show(`Stock insuficiente de ${item.productName}. Quedan ${item.maxStock} ${item.unit}`, 'warning');
-            else alert(`Stock insuficiente. Solo quedan ${item.maxStock} ${item.unit}.`);
-            this._renderCart();
-            return;
+
+        const prods = await DB.getProducts();
+        const allComboItems = await DB.getAllComboItems();
+
+        if (item.isCombo) {
+            const comboComponents = allComboItems.filter(ci => ci.combo_id === item.productId);
+            for (const comp of comboComponents) {
+                const compProd = prods.find(p => p.id === comp.product_id);
+                const compStock = parseFloat(compProd ? compProd.stock : 0) || 0;
+                const reqPerCombo = parseFloat(comp.quantity) || 1;
+
+                let alreadyUsed = 0;
+                this.cart.forEach((it, i) => {
+                    if (i === idx) return;
+                    if (it.productId === comp.product_id) {
+                        alreadyUsed += it.quantity;
+                    } else if (it.isCombo) {
+                        const otherComp = allComboItems.find(ci => ci.combo_id === it.productId && ci.product_id === comp.product_id);
+                        if (otherComp) alreadyUsed += (it.quantity * (parseFloat(otherComp.quantity) || 1));
+                    }
+                });
+
+                const totalNeeded = alreadyUsed + (q * reqPerCombo);
+                if (totalNeeded > compStock) {
+                    const compUnit = Utils.unitAbbr ? Utils.unitAbbr(compProd?.unit || 'u.') : 'u.';
+                    const maxPossibleCombos = Math.max(0, Math.floor((compStock - alreadyUsed) / reqPerCombo));
+                    const msg = `Stock insuficiente para "${item.productName}". Falta: ${compProd?.name || 'Insumo'} (Máximo posible con stock actual: ${maxPossibleCombos})`;
+                    if (typeof Toast !== 'undefined') Toast.show(msg, 'warning', 3500);
+                    else alert(msg);
+                    this._renderCart();
+                    return;
+                }
+            }
+        } else {
+            let reservedByCombos = 0;
+            this.cart.forEach((it, i) => {
+                if (i !== idx && it.isCombo) {
+                    const comp = allComboItems.find(ci => ci.combo_id === it.productId && ci.product_id === item.productId);
+                    if (comp) reservedByCombos += (it.quantity * (parseFloat(comp.quantity) || 1));
+                }
+            });
+            const prod = prods.find(p => p.id === item.productId);
+            const totalStock = parseFloat(prod?.stock) || 0;
+            const effectiveMax = Math.max(0, totalStock - reservedByCombos);
+
+            if (q > effectiveMax) {
+                if (typeof Toast !== 'undefined') Toast.show(`Stock insuficiente de ${item.productName}. Disponibles: ${effectiveMax} ${item.unit}`, 'warning');
+                else alert(`Stock insuficiente. Solo quedan ${effectiveMax} ${item.unit}.`);
+                this._renderCart();
+                return;
+            }
         }
+
         item.quantity = Math.round(q * 1000) / 1000;
         this._renderCart();
     },
@@ -532,6 +670,35 @@ const SalesModule = {
             if (typeof Toast !== 'undefined') Toast.show('Selecciona un cliente para la cuenta corriente', 'warning');
             else alert('Selecciona un cliente para cuenta corriente');
             return;
+        }
+
+        // Validación integral de stock antes de confirmar
+        const prods = await DB.getProducts();
+        const allComboItems = await DB.getAllComboItems();
+        const neededPerProduct = {};
+
+        for (const it of this.cart) {
+            if (it.isCombo) {
+                const comps = allComboItems.filter(ci => ci.combo_id === it.productId);
+                for (const c of comps) {
+                    const req = (parseFloat(c.quantity) || 1) * (parseFloat(it.quantity) || 0);
+                    neededPerProduct[c.product_id] = (neededPerProduct[c.product_id] || 0) + req;
+                }
+            } else {
+                neededPerProduct[it.productId] = (neededPerProduct[it.productId] || 0) + (parseFloat(it.quantity) || 0);
+            }
+        }
+
+        for (const [pId, needed] of Object.entries(neededPerProduct)) {
+            const p = prods.find(x => x.id === pId);
+            const avail = parseFloat(p ? p.stock : 0) || 0;
+            if (needed > avail) {
+                const u = p?.unit ? (Utils.unitAbbr ? Utils.unitAbbr(p.unit) : p.unit) : 'u.';
+                const msg = `Stock insuficiente de "${p?.name || 'Producto'}": se requieren ${needed} ${u}, pero solo hay ${avail} ${u} disponibles.`;
+                if (typeof Toast !== 'undefined') Toast.show(msg, 'danger', 5000);
+                else alert(msg);
+                return;
+            }
         }
 
         const confirmBtn = document.querySelector('button[onclick="SalesModule.confirmSale()"]');

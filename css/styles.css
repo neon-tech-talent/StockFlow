@@ -1114,6 +1114,41 @@ textarea.form-input { resize: vertical; min-height: 80px; }
   background: rgba(244, 63, 94, 0.04);
 }
 
+/* ── COMBOS Y PROMOCIONES ── */
+.prod-chip-combo {
+  border-left: 3px solid var(--purple);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.07) 0%, rgba(168, 85, 247, 0.02) 100%);
+}
+
+.prod-chip-combo:hover {
+  border-color: var(--purple);
+  background: rgba(168, 85, 247, 0.12);
+}
+
+.row-combo {
+  background: rgba(168, 85, 247, 0.03);
+}
+
+.row-combo:hover td {
+  background: rgba(168, 85, 247, 0.07) !important;
+}
+
+.combo-row-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  background: var(--bg-card);
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 0.45rem;
+  transition: all 0.18s ease;
+}
+
+.combo-row-item:hover {
+  border-color: var(--accent);
+}
+
 
 /* Cart list & item cards */
 .cart-list {

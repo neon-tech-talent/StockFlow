@@ -100,6 +100,155 @@ const DB = {
     return null;
   },
 
+  /* ── COMBOS & BUNDLES ── */
+  async getAllComboItems() {
+    const aid = this._adminId();
+    if (!aid) return [];
+    // 1. Intentar desde combo_items en Supabase
+    try {
+      const { data, error } = await this.client.from('combo_items').select('*').eq('admin_id', aid);
+      if (!error && Array.isArray(data)) return data;
+    } catch (e) {}
+
+    // 2. Fallback desde turnos_audit si la tabla no fue creada aún
+    try {
+      const { data: audits } = await this.client.from('turnos_audit')
+        .select('*')
+        .eq('admin_id', aid)
+        .eq('entity_name', 'combo_definition')
+        .order('created_at', { ascending: false });
+      if (audits && audits.length) {
+        const latestByCombo = new Map();
+        for (const a of audits) {
+          if (!latestByCombo.has(a.entity_id)) {
+            let parsed = [];
+            try { parsed = JSON.parse(a.details); } catch(err) {}
+            if (Array.isArray(parsed)) {
+              latestByCombo.set(a.entity_id, parsed.map(it => ({
+                id: a.id,
+                admin_id: aid,
+                combo_id: a.entity_id,
+                product_id: it.product_id || it.productId,
+                quantity: parseFloat(it.quantity) || 1
+              })));
+            }
+          }
+        }
+        return Array.from(latestByCombo.values()).flat();
+      }
+    } catch(e) {}
+    return [];
+  },
+
+  async getComboItems(comboId) {
+    if (!comboId) return [];
+    const all = await this.getAllComboItems();
+    return all.filter(it => it.combo_id === comboId);
+  },
+
+  async saveCombo(comboData, itemsList = []) {
+    const aid = this._adminId();
+    if (!aid) throw new Error("No hay sesión de administrador activa.");
+
+    // Obtener los productos para calcular costo acumulado
+    const allProds = await this.getProducts();
+    let calculatedCost = 0;
+    for (const it of itemsList) {
+      const prodId = it.product_id || it.productId;
+      const prod = allProds.find(p => p.id === prodId);
+      const q = parseFloat(it.quantity) || 1;
+      calculatedCost += (parseFloat(prod?.cost_price) || 0) * q;
+    }
+    calculatedCost = Math.round(calculatedCost * 100) / 100;
+
+    const prodPayload = {
+      name: comboData.name.trim(),
+      category_id: comboData.categoryId || null,
+      sell_price: parseFloat(comboData.sellPrice) || 0,
+      cost_price: calculatedCost,
+      unit: 'Combo',
+      admin_id: aid
+    };
+
+    let savedProduct;
+    if (comboData.id) {
+      const { data, error } = await this.client.from('products').update(prodPayload).eq('id', comboData.id).eq('admin_id', aid).select().single();
+      if (error) throw error;
+      savedProduct = data;
+    } else {
+      const { data, error } = await this.client.from('products').insert({ ...prodPayload, stock: 0 }).select().single();
+      if (error) throw error;
+      savedProduct = data;
+    }
+
+    const comboId = savedProduct.id;
+
+    // Guardar en tabla combo_items
+    let savedToTable = false;
+    try {
+      await this.client.from('combo_items').delete().eq('combo_id', comboId).eq('admin_id', aid);
+      if (itemsList.length > 0) {
+        const rowsToInsert = itemsList.map(it => ({
+          admin_id: aid,
+          combo_id: comboId,
+          product_id: it.product_id || it.productId,
+          quantity: parseFloat(it.quantity) || 1
+        }));
+        const { error: insErr } = await this.client.from('combo_items').insert(rowsToInsert);
+        if (!insErr) savedToTable = true;
+      } else {
+        savedToTable = true;
+      }
+    } catch(e) {}
+
+    // Fallback en turnos_audit para compatibilidad si la tabla combo_items no fue creada
+    if (!savedToTable) {
+      try {
+        const formattedItems = itemsList.map(it => ({
+          product_id: it.product_id || it.productId,
+          quantity: parseFloat(it.quantity) || 1
+        }));
+        await this.client.from('turnos_audit').insert({
+          admin_id: aid,
+          user_name: Auth.getSession()?.user || 'admin',
+          action: 'GUARDAR_COMBO',
+          entity_name: 'combo_definition',
+          entity_id: comboId,
+          details: JSON.stringify(formattedItems),
+          created_at: new Date().toISOString()
+        });
+      } catch(e) {
+        console.warn("Fallo guardado de combo en fallback:", e);
+      }
+    }
+
+    return savedProduct;
+  },
+
+  async deleteCombo(comboId) {
+    const aid = this._adminId();
+    if (!aid || !comboId) return;
+    try {
+      await this.client.from('combo_items').delete().eq('combo_id', comboId).eq('admin_id', aid);
+    } catch(e) {}
+    await this.deleteProduct(comboId);
+  },
+
+  calculateComboStock(combo, comboItems, allProducts) {
+    if (!comboItems || !comboItems.length) return 0;
+    let minPossible = Infinity;
+    for (const item of comboItems) {
+      const prod = allProducts.find(p => p.id === (item.product_id || item.productId));
+      if (!prod) return 0;
+      const currentStock = parseFloat(prod.stock) || 0;
+      const reqQty = parseFloat(item.quantity) || 1;
+      if (reqQty <= 0) continue;
+      const possible = Math.floor(currentStock / reqQty);
+      if (possible < minPossible) minPossible = possible;
+    }
+    return minPossible === Infinity ? 0 : Math.max(0, minPossible);
+  },
+
   /* ── STOCK MOVEMENTS & AUDIT ── */
   async recordStockMovement({ productId, productName, type, quantity, reason, notes, prevStock, newStock, unit }) {
     const aid = this._adminId();
@@ -340,21 +489,48 @@ const DB = {
       await this.client.from('sale_items').insert(fallbackItems);
     }
 
+    const allProdsForSale = await this.getProducts();
+    const allComboItemsForSale = await this.getAllComboItems();
+
     for (const it of items) { 
       if (it.productId) {
-        const qtyToAdjust = parseFloat(it.quantity) || 0;
-        const adj = await this.adjustStock(it.productId, -qtyToAdjust); 
-        await this.recordStockMovement({
-          productId: it.productId,
-          productName: it.productName,
-          type: 'venta',
-          quantity: qtyToAdjust,
-          reason: `Venta #${saleId.slice(-4)} (${sale.clientName || 'Consumidor Final'})`,
-          notes: sale.paymentType ? `Pago: ${(typeof Utils !== 'undefined' && Utils.paymentLabel) ? Utils.paymentLabel(sale.paymentType) : sale.paymentType}` : '',
-          prevStock: adj?.prevStock,
-          newStock: adj?.stock,
-          unit: it.unit
-        });
+        const prodMatch = allProdsForSale.find(p => p.id === it.productId);
+        const isCombo = (it.unit === 'Combo' || it.isCombo || prodMatch?.unit === 'Combo');
+        const comboComponents = isCombo ? allComboItemsForSale.filter(ci => ci.combo_id === it.productId) : [];
+
+        if (isCombo && comboComponents.length > 0) {
+          const comboQty = parseFloat(it.quantity) || 0;
+          for (const comp of comboComponents) {
+            const compProd = allProdsForSale.find(p => p.id === comp.product_id);
+            const compNeeded = (parseFloat(comp.quantity) || 1) * comboQty;
+            const adj = await this.adjustStock(comp.product_id, -compNeeded);
+            await this.recordStockMovement({
+              productId: comp.product_id,
+              productName: compProd?.name || 'Componente Combo',
+              type: 'venta',
+              quantity: compNeeded,
+              reason: `Venta Combo: "${it.productName}" x ${comboQty} (Venta #${saleId.slice(-4)})`,
+              notes: sale.paymentType ? `Pago: ${(typeof Utils !== 'undefined' && Utils.paymentLabel) ? Utils.paymentLabel(sale.paymentType) : sale.paymentType}` : '',
+              prevStock: adj?.prevStock,
+              newStock: adj?.stock,
+              unit: compProd?.unit || 'u.'
+            });
+          }
+        } else {
+          const qtyToAdjust = parseFloat(it.quantity) || 0;
+          const adj = await this.adjustStock(it.productId, -qtyToAdjust); 
+          await this.recordStockMovement({
+            productId: it.productId,
+            productName: it.productName,
+            type: 'venta',
+            quantity: qtyToAdjust,
+            reason: `Venta #${saleId.slice(-4)} (${sale.clientName || 'Consumidor Final'})`,
+            notes: sale.paymentType ? `Pago: ${(typeof Utils !== 'undefined' && Utils.paymentLabel) ? Utils.paymentLabel(sale.paymentType) : sale.paymentType}` : '',
+            prevStock: adj?.prevStock,
+            newStock: adj?.stock,
+            unit: it.unit
+          });
+        }
       }
     }
 
@@ -391,20 +567,47 @@ const DB = {
     if (!sale || sale.voided) return false;
 
     const items = await this.getSaleItems(saleId);
+    const allProdsForVoid = await this.getProducts();
+    const allComboItemsForVoid = await this.getAllComboItems();
+
     for (const it of items) { 
       if (it.product_id) {
-        const qtyToAdjust = parseFloat(it.quantity) || 0;
-        const adj = await this.adjustStock(it.product_id, qtyToAdjust); 
-        await this.recordStockMovement({
-          productId: it.product_id,
-          productName: it.product_name,
-          type: 'anulacion',
-          quantity: qtyToAdjust,
-          reason: `Anulación Venta #${saleId.slice(-4)}`,
-          notes: '',
-          prevStock: adj?.prevStock,
-          newStock: adj?.stock
-        });
+        const prodMatch = allProdsForVoid.find(p => p.id === it.product_id);
+        const isCombo = (prodMatch?.unit === 'Combo');
+        const comboComponents = isCombo ? allComboItemsForVoid.filter(ci => ci.combo_id === it.product_id) : [];
+
+        if (isCombo && comboComponents.length > 0) {
+          const comboQty = parseFloat(it.quantity) || 0;
+          for (const comp of comboComponents) {
+            const compProd = allProdsForVoid.find(p => p.id === comp.product_id);
+            const compNeeded = (parseFloat(comp.quantity) || 1) * comboQty;
+            const adj = await this.adjustStock(comp.product_id, compNeeded);
+            await this.recordStockMovement({
+              productId: comp.product_id,
+              productName: compProd?.name || 'Componente Combo',
+              type: 'anulacion',
+              quantity: compNeeded,
+              reason: `Anulación Combo: "${it.product_name}" x ${comboQty} (Venta #${saleId.slice(-4)})`,
+              notes: '',
+              prevStock: adj?.prevStock,
+              newStock: adj?.stock,
+              unit: compProd?.unit || 'u.'
+            });
+          }
+        } else {
+          const qtyToAdjust = parseFloat(it.quantity) || 0;
+          const adj = await this.adjustStock(it.product_id, qtyToAdjust); 
+          await this.recordStockMovement({
+            productId: it.product_id,
+            productName: it.product_name,
+            type: 'anulacion',
+            quantity: qtyToAdjust,
+            reason: `Anulación Venta #${saleId.slice(-4)}`,
+            notes: '',
+            prevStock: adj?.prevStock,
+            newStock: adj?.stock
+          });
+        }
       }
     }
 

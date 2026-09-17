@@ -28,11 +28,17 @@ const StockModule = {
         el.innerHTML = `
       <div class="module-header">
         <div class="search-group">
-          <input id="sp-name" type="text" placeholder="Buscar producto..." class="search-input">
+          <input id="sp-name" type="text" placeholder="Buscar producto o combo..." class="search-input">
           <select id="sp-cat" class="select-input"><option value="">Todas las categorías</option></select>
+          <select id="sp-type" class="select-input">
+            <option value="">Todos los tipos</option>
+            <option value="products">Solo Productos</option>
+            <option value="combos">Solo Combos</option>
+          </select>
         </div>
         <div class="btn-row">
           <button class="btn btn-outline" onclick="StockModule.openCatModal()">⚙ Categorías</button>
+          <button class="btn btn-outline" style="border-color:var(--accent); color:var(--accent); font-weight:600;" onclick="StockModule.openComboModal()">🎁 + Nuevo Combo</button>
           <button class="btn btn-primary" onclick="StockModule.openProductModal()">+ Nuevo Producto</button>
         </div>
       </div>
@@ -41,6 +47,7 @@ const StockModule = {
         await this._renderTable();
         document.getElementById('sp-name').oninput = () => this._renderTable();
         document.getElementById('sp-cat').onchange = () => this._renderTable();
+        document.getElementById('sp-type').onchange = () => this._renderTable();
     },
 
     async _renderSupplies(el) {
@@ -266,17 +273,75 @@ const StockModule = {
     async _renderTable() {
         const q = (document.getElementById('sp-name')?.value || '').toLowerCase();
         const cf = document.getElementById('sp-cat')?.value || '';
+        const tf = document.getElementById('sp-type')?.value || '';
         const cats = await DB.getCategories();
         const prods = await DB.getProducts();
-        const rows = prods.filter(p => (!q || p.name.toLowerCase().includes(q)) && (!cf || p.category_id === cf));
+        const allComboItems = await DB.getAllComboItems();
+
+        const rows = prods.filter(p => {
+            const matchesQ = !q || p.name.toLowerCase().includes(q);
+            const matchesCat = !cf || p.category_id === cf;
+            let matchesType = true;
+            if (tf === 'combos') matchesType = (p.unit === 'Combo');
+            else if (tf === 'products') matchesType = (p.unit !== 'Combo');
+            return matchesQ && matchesCat && matchesType;
+        });
+
         const box = document.getElementById('products-container');
         if (!rows.length) {
-            box.innerHTML = Utils.emptyState('📦', 'No hay productos encontrados', 'Prueba modificando la búsqueda o agrega un nuevo producto');
+            box.innerHTML = Utils.emptyState('📦', 'No hay productos ni combos encontrados', 'Prueba modificando la búsqueda o agrega un nuevo producto o combo');
             return;
         }
-        box.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th>Producto</th><th>Categoría</th><th>P. Venta</th><th>P. Costo</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>
+
+        box.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th>Producto / Combo</th><th>Categoría</th><th>P. Venta</th><th>P. Costo</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>
           ${rows.map(p => {
             const cat = cats.find(c => c.id === p.category_id);
+            const isCombo = (p.unit === 'Combo');
+
+            if (isCombo) {
+                const cItems = allComboItems.filter(ci => ci.combo_id === p.id);
+                const comboStock = DB.calculateComboStock(p, cItems, prods);
+                const isOut = comboStock <= 0;
+                const isLow = comboStock > 0 && comboStock < 5;
+                const badgeClass = isOut ? 'badge-danger' : (isLow ? 'badge-warning' : 'badge-success');
+
+                const componentsSummary = cItems.map(ci => {
+                    const compProd = prods.find(x => x.id === ci.product_id);
+                    const unitAbbr = compProd ? (Utils.unitAbbr ? Utils.unitAbbr(compProd.unit) : compProd.unit) : '';
+                    return `${ci.quantity} ${unitAbbr} ${compProd ? compProd.name : 'Insumo'}`;
+                }).join(' + ');
+
+                return `<tr class="row-combo">
+                  <td>
+                    <div style="display:flex; align-items:center; gap:0.4rem;">
+                      <span class="badge" style="background:rgba(212,175,55,0.18); color:var(--accent); font-size:0.75rem; border:1px solid var(--border);">🎁 COMBO</span>
+                      <strong style="color:var(--accent-light);">${Utils.escHtml(p.name)}</strong>
+                    </div>
+                    <div class="text-muted" style="font-size:0.78rem; margin-top:0.25rem;">
+                      <span style="opacity:0.8;">Incluye:</span> ${Utils.escHtml(componentsSummary || 'Sin productos asignados')}
+                    </div>
+                  </td>
+                  <td>${cat ? Utils.escHtml(cat.name) : '-'}</td>
+                  <td><strong style="color:var(--accent);">${Utils.currency(p.sell_price)}</strong></td>
+                  <td>${Utils.currency(p.cost_price)}</td>
+                  <td>
+                    <div style="display:flex; flex-direction:column; gap:0.2rem;">
+                      <span class="badge ${badgeClass}" title="Stock dinámico calculado en base a sus productos componentes">
+                        🎁 ${comboStock} combos disp.
+                      </span>
+                      <small class="text-muted" style="font-size:0.7rem;">(Stock automático)</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div style="display:flex; align-items:center; gap:0.25rem;">
+                      <button class="btn-icon" aria-label="Editar Combo ${Utils.escHtml(p.name)}" title="Editar Combo" onclick="StockModule.openComboModal('${p.id}')">✏️</button>
+                      <button class="btn-icon danger" aria-label="Eliminar Combo ${Utils.escHtml(p.name)}" title="Eliminar Combo" onclick="StockModule.delCombo('${p.id}')">🗑️</button>
+                    </div>
+                  </td>
+                </tr>`;
+            }
+
+            // Producto regular
             const isLow = p.stock > 0 && p.stock < 5;
             const isOut = p.stock <= 0;
             const badgeClass = isOut ? 'badge-danger' : (isLow ? 'badge-warning' : 'badge-success');
@@ -381,6 +446,195 @@ const StockModule = {
         Modal.close();
         if (typeof Toast !== 'undefined') Toast.show(id ? 'Producto actualizado' : 'Nuevo producto creado', 'success');
         await this._renderProducts(document.getElementById('stock-tab-content'));
+    },
+
+    async openComboModal(id) {
+        const allProds = await DB.getProducts();
+        // Solo productos regulares pueden ser componentes de combos
+        const regularProds = allProds.filter(p => p.unit !== 'Combo');
+        const cats = await DB.getCategories();
+        const p = id ? allProds.find(x => x.id === id) : null;
+        const currentItems = id ? await DB.getComboItems(id) : [];
+
+        if (!regularProds.length) {
+            if (typeof Toast !== 'undefined') Toast.show('Primero debes tener cargado al menos un producto regular para armar un combo.', 'warning');
+            else alert('Primero debes cargar productos regulares para armar un combo.');
+            return;
+        }
+
+        Modal.open(`
+      <h2 class="modal-title">🎁 ${p ? 'Editar' : 'Nuevo'} Combo / Promoción</h2>
+      <p class="text-muted" style="font-size:0.85rem; margin-top:-0.8rem; margin-bottom:1.25rem;">
+        Agrupa productos para venderlos juntos a un precio promocional. El stock se descontará automáticamente de cada producto al venderlo.
+      </p>
+      <form id="form-combo" onsubmit="StockModule.saveComboForm(event, '${id || ''}')">
+        <div class="form-group">
+          <label>Nombre del Combo *</label>
+          <input name="name" class="form-input" required value="${Utils.escHtml(p?.name || '')}" placeholder="Ej: Combo Desayuno (Leche + Pan)">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Categoría</label>
+            <select name="categoryId" class="form-input">
+              <option value="">Sin categoría</option>
+              ${cats.map(c => `<option value="${c.id}" ${p?.category_id === c.id ? 'selected' : ''}>${Utils.escHtml(c.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Precio de Venta del Combo ($) *</label>
+            <input name="sellPrice" id="combo-sell-price" type="number" step="0.01" min="0" class="form-input" required value="${p?.sell_price || ''}" placeholder="0.00" oninput="StockModule.updateComboSummary()">
+          </div>
+        </div>
+
+        <div style="margin: 1.25rem 0 0.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+            <label style="font-weight:700; color:var(--text-main); font-size:0.9rem;">📦 Productos que integran el combo *</label>
+            <button type="button" class="btn btn-sm btn-outline" style="color:var(--accent); border-color:var(--border);" onclick="StockModule.addComboItemRow()">+ Agregar Producto</button>
+          </div>
+          <div id="combo-items-list" style="display:flex; flex-direction:column; gap:0.6rem; max-height:220px; overflow-y:auto; padding:0.4rem; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); background:rgba(0,0,0,0.25);">
+          </div>
+        </div>
+
+        <!-- Resumen de costos vs venta -->
+        <div id="combo-summary-card" style="margin-top:1rem; padding:0.75rem 1rem; background:rgba(212,175,55,0.06); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.85rem;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+            <span class="text-muted">Costo total componentes:</span>
+            <strong id="combo-summary-cost">$0,00</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
+            <span class="text-muted">Precio venta individual acumulado:</span>
+            <span id="combo-summary-indiv-price" class="text-muted">$0,00</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-top:1px dashed var(--border); padding-top:0.4rem; margin-top:0.4rem;">
+            <span>Ganancia estimada combo:</span>
+            <strong id="combo-summary-margin" style="color:var(--green);">$0,00</strong>
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:1.5rem;">
+          <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar Combo</button>
+        </div>
+      </form>`);
+
+        this._regularProdsCache = regularProds;
+
+        // Cargar renglones existentes o al menos 2 por defecto
+        if (currentItems.length > 0) {
+            currentItems.forEach(it => this.addComboItemRow(it.product_id, it.quantity));
+        } else {
+            this.addComboItemRow();
+            this.addComboItemRow();
+        }
+        this.updateComboSummary();
+    },
+
+    addComboItemRow(selectedProdId = '', quantity = 1) {
+        const container = document.getElementById('combo-items-list');
+        if (!container) return;
+        const prods = this._regularProdsCache || [];
+
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'combo-row-item';
+        rowDiv.style = 'display:flex; gap:0.5rem; align-items:center;';
+
+        const optionsHtml = prods.map(p => {
+            const unitAbbr = Utils.unitAbbr ? Utils.unitAbbr(p.unit) : p.unit;
+            return `<option value="${p.id}" ${p.id === selectedProdId ? 'selected' : ''}>${Utils.escHtml(p.name)} (${p.stock} ${unitAbbr} disp.)</option>`;
+        }).join('');
+
+        rowDiv.innerHTML = `
+          <select class="form-input combo-item-prod" required style="flex:2;" onchange="StockModule.updateComboSummary()">
+            <option value="">-- Seleccionar producto --</option>
+            ${optionsHtml}
+          </select>
+          <div style="display:flex; align-items:center; gap:0.3rem; flex:1;">
+            <input type="number" step="any" min="0.001" class="form-input combo-item-qty" required value="${quantity}" placeholder="Cant." oninput="StockModule.updateComboSummary()">
+          </div>
+          <button type="button" class="btn-icon danger" style="min-width:32px; min-height:32px; padding:0.2rem;" title="Quitar producto" onclick="this.closest('.combo-row-item').remove(); StockModule.updateComboSummary();">✕</button>
+        `;
+
+        container.appendChild(rowDiv);
+        this.updateComboSummary();
+    },
+
+    updateComboSummary() {
+        const prods = this._regularProdsCache || [];
+        const rows = document.querySelectorAll('.combo-row-item');
+        let totalCost = 0;
+        let totalIndividualSell = 0;
+
+        rows.forEach(r => {
+            const sel = r.querySelector('.combo-item-prod');
+            const qtyInput = r.querySelector('.combo-item-qty');
+            if (sel && sel.value && qtyInput && qtyInput.value) {
+                const prod = prods.find(p => p.id === sel.value);
+                const q = parseFloat(qtyInput.value) || 0;
+                if (prod) {
+                    totalCost += (parseFloat(prod.cost_price) || 0) * q;
+                    totalIndividualSell += (parseFloat(prod.sell_price) || 0) * q;
+                }
+            }
+        });
+
+        const sellPrice = parseFloat(document.getElementById('combo-sell-price')?.value) || 0;
+        const margin = Math.max(0, sellPrice - totalCost);
+
+        const costEl = document.getElementById('combo-summary-cost');
+        const indivEl = document.getElementById('combo-summary-indiv-price');
+        const marginEl = document.getElementById('combo-summary-margin');
+
+        if (costEl) costEl.textContent = Utils.currency(totalCost);
+        if (indivEl) indivEl.textContent = Utils.currency(totalIndividualSell);
+        if (marginEl) marginEl.textContent = Utils.currency(margin);
+    },
+
+    async saveComboForm(e, id) {
+        e.preventDefault();
+        const f = e.target;
+        const name = f.name.value.trim();
+        const categoryId = f.categoryId.value;
+        const sellPrice = parseFloat(f.sellPrice.value) || 0;
+
+        const rows = document.querySelectorAll('.combo-row-item');
+        const items = [];
+        const seenProds = new Set();
+
+        for (const r of rows) {
+            const prodId = r.querySelector('.combo-item-prod')?.value;
+            const qty = parseFloat(r.querySelector('.combo-item-qty')?.value) || 0;
+
+            if (!prodId) continue;
+            if (qty <= 0) {
+                if (typeof Toast !== 'undefined') Toast.show('La cantidad de cada producto debe ser mayor a 0.', 'warning');
+                return;
+            }
+            if (seenProds.has(prodId)) {
+                if (typeof Toast !== 'undefined') Toast.show('No puedes agregar el mismo producto más de una vez en el combo. Incrementa su cantidad.', 'warning');
+                return;
+            }
+            seenProds.add(prodId);
+            items.push({ product_id: prodId, quantity: qty });
+        }
+
+        if (items.length < 1) {
+            if (typeof Toast !== 'undefined') Toast.show('Debes agregar al menos un producto al combo.', 'warning');
+            return;
+        }
+
+        await DB.saveCombo({ id: id || undefined, name, categoryId, sellPrice }, items);
+        Modal.close();
+        if (typeof Toast !== 'undefined') Toast.show(id ? 'Combo actualizado con éxito' : '¡Nuevo combo creado con éxito!', 'success');
+        await this._renderProducts(document.getElementById('stock-tab-content'));
+    },
+
+    async delCombo(id) {
+        if (confirm('¿Eliminar este combo? Los productos individuales que lo integran NO se verán afectados.')) {
+            await DB.deleteCombo(id);
+            if (typeof Toast !== 'undefined') Toast.show('Combo eliminado', 'info');
+            await this._renderProducts(document.getElementById('stock-tab-content'));
+        }
     },
 
     async openAdjustModal(productId, defaultType = 'deduct') {
