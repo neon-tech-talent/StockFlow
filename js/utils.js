@@ -190,6 +190,28 @@ const Utils = {
             duration: 380,
             easing: 'easeOutQuad'
         });
+    },
+
+    /* ── EXPORTACIÓN A EXCEL / CSV ── */
+    exportToCsv(filename, rows) {
+        if (!Array.isArray(rows) || !rows.length) return;
+        const processCell = (cell) => {
+            if (cell === null || cell === undefined) return '""';
+            let str = String(cell);
+            str = str.replace(/"/g, '""');
+            return `"${str}"`;
+        };
+        const csvRows = rows.map(row => row.map(processCell).join(';'));
+        // UTF-8 BOM (\uFEFF) para compatibilidad total con Excel en español (tildes, ñ, $)
+        const blob = new Blob(["\uFEFF" + csvRows.join("\r\n")], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename.endsWith('.csv') ? filename : `${filename}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 500);
     }
 };
 

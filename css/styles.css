@@ -423,6 +423,13 @@ body {
   transform: translateY(-1px);
 }
 
+.exp-period-btn.active {
+  background: var(--accent) !important;
+  color: #0c110d !important;
+  border-color: var(--accent) !important;
+  font-weight: 700 !important;
+}
+
 .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.8rem; border-radius: var(--radius-xs); }
 .btn-lg { padding: 0.85rem 1.75rem; font-size: 1rem; border-radius: var(--radius); }
 

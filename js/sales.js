@@ -39,6 +39,7 @@ const SalesModule = {
            <select class="form-input" onchange="SalesModule.setHistoryFilter(null, this.value)">
              ${yearOptions.map(y => `<option value="${y}" ${y === this.historyYear ? 'selected' : ''}>${y}</option>`).join('')}
            </select>
+           <button class="btn btn-outline" onclick="SalesModule.openExportModal()" title="Extraer ventas por día o período a Excel" style="display:inline-flex; align-items:center; gap:0.4rem;">📥 Extraer Ventas</button>
            <button class="btn btn-primary" onclick="App.go('new-sale')">+ Nueva Venta</button>
         </div>
       </div>
@@ -161,6 +162,372 @@ const SalesModule = {
             await DB.voidSale(id);
             if (typeof Toast !== 'undefined') Toast.show('Venta anulada correctamente', 'info');
             await this.renderHistory(document.getElementById('content'));
+        }
+    },
+
+    /* ── EXTRACCIÓN Y EXPORTACIÓN DE VENTAS (EXCEL / CSV) ── */
+    async openExportModal() {
+        this._exportPeriodType = 'day';
+        const allSales = await DB.getSales();
+        this._cachedSalesForExport = allSales;
+
+        Modal.open(`
+          <h2 class="modal-title">📥 Extraer Ventas (Exportar a Excel)</h2>
+          <p class="text-muted" style="font-size:0.85rem; margin-top:-0.75rem; margin-bottom:1.2rem;">
+            Descarga un archivo con las ventas registradas por día, rango de fechas o mes completo.
+          </p>
+
+          <div class="form-group" style="margin-bottom:1rem;">
+            <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.4rem;">Período a Extraer:</label>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:0.5rem;">
+              <button type="button" class="btn btn-sm btn-outline exp-period-btn active" id="btn-exp-day" onclick="SalesModule.setExportPeriodType('day')">
+                📅 Por Día
+              </button>
+              <button type="button" class="btn btn-sm btn-outline exp-period-btn" id="btn-exp-range" onclick="SalesModule.setExportPeriodType('range')">
+                📆 Rango
+              </button>
+              <button type="button" class="btn btn-sm btn-outline exp-period-btn" id="btn-exp-month" onclick="SalesModule.setExportPeriodType('month')">
+                🗓️ Por Mes
+              </button>
+            </div>
+          </div>
+
+          <div id="exp-inputs-container" style="margin-bottom:1rem;"></div>
+
+          <div class="form-row" style="margin-bottom:1rem;">
+            <div class="form-group" style="flex:1;">
+              <label style="font-size:0.82rem; font-weight:600;">Estado:</label>
+              <select id="exp-filter-status" class="form-input" onchange="SalesModule.updateExportPreview()">
+                <option value="completed" selected>Solo completadas</option>
+                <option value="all">Todas (incluye anuladas)</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label style="font-size:0.82rem; font-weight:600;">Medio de Pago:</label>
+              <select id="exp-filter-pay" class="form-input" onchange="SalesModule.updateExportPreview()">
+                <option value="all" selected>Todos los medios</option>
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="qr">MercadoPago / QR</option>
+                <option value="cuenta_corriente">Cuenta Corriente</option>
+                <option value="debito">Débito</option>
+                <option value="credito">Crédito</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:1.25rem;">
+            <label style="font-size:0.82rem; font-weight:600;">Nivel de Detalle del Archivo:</label>
+            <select id="exp-detail-type" class="form-input">
+              <option value="summary" selected>📄 Resumen por Venta (1 fila por venta con totales y medios de pago)</option>
+              <option value="items">📦 Detallado por Producto (1 fila por cada producto vendido, cantidades y precios)</option>
+            </select>
+          </div>
+
+          <div id="exp-preview-box" class="card" style="padding:0.85rem 1rem; background:rgba(212,175,55,0.06); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:1.25rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+              <div>
+                <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Ventas Encontradas</span>
+                <div id="exp-preview-count" style="font-size:1.35rem; font-weight:800; color:var(--text-main);">0</div>
+              </div>
+              <div style="text-align:right;">
+                <span style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Total Acumulado</span>
+                <div id="exp-preview-total" style="font-size:1.35rem; font-weight:800; color:var(--accent);">$0,00</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" onclick="Modal.close()">Cancelar</button>
+            <button type="button" id="btn-do-export" class="btn btn-primary" onclick="SalesModule.executeExport()" style="gap:0.4rem;">
+              📥 Descargar Excel (CSV)
+            </button>
+          </div>
+        `);
+
+        this.setExportPeriodType('day');
+    },
+
+    setExportPeriodType(type) {
+        this._exportPeriodType = type;
+        document.querySelectorAll('.exp-period-btn').forEach(b => b.classList.remove('active'));
+        const activeBtn = document.getElementById(`btn-exp-${type}`);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        const container = document.getElementById('exp-inputs-container');
+        if (!container) return;
+
+        const today = Utils.todayStr();
+        const curYear = new Date().getFullYear();
+        const yearOptions = [curYear - 2, curYear - 1, curYear, curYear + 1];
+
+        if (type === 'day') {
+            container.innerHTML = `
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:0.82rem; font-weight:600;">Seleccionar Día:</label>
+                    <input type="date" id="exp-input-day" class="form-input" value="${today}" onchange="SalesModule.updateExportPreview()">
+                </div>`;
+        } else if (type === 'range') {
+            container.innerHTML = `
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-group" style="flex:1;">
+                        <label style="font-size:0.82rem; font-weight:600;">Desde:</label>
+                        <input type="date" id="exp-input-start" class="form-input" value="${today}" onchange="SalesModule.updateExportPreview()">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label style="font-size:0.82rem; font-weight:600;">Hasta:</label>
+                        <input type="date" id="exp-input-end" class="form-input" value="${today}" onchange="SalesModule.updateExportPreview()">
+                    </div>
+                </div>`;
+        } else if (type === 'month') {
+            const curM = (this.historyMonth !== undefined) ? this.historyMonth : new Date().getMonth();
+            const curY = (this.historyYear !== undefined) ? this.historyYear : curYear;
+            const monthNames = Array.from({ length: 12 }, (_, i) => {
+                const raw = new Date(2000, i).toLocaleString('es', { month: 'long' });
+                return raw.charAt(0).toUpperCase() + raw.slice(1);
+            });
+            container.innerHTML = `
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-group" style="flex:2;">
+                        <label style="font-size:0.82rem; font-weight:600;">Mes:</label>
+                        <select id="exp-input-month" class="form-input" onchange="SalesModule.updateExportPreview()">
+                            ${monthNames.map((name, i) => `<option value="${i}" ${i === curM ? 'selected' : ''}>${name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label style="font-size:0.82rem; font-weight:600;">Año:</label>
+                        <select id="exp-input-year" class="form-input" onchange="SalesModule.updateExportPreview()">
+                            ${yearOptions.map(y => `<option value="${y}" ${y === curY ? 'selected' : ''}>${y}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>`;
+        }
+        this.updateExportPreview();
+    },
+
+    getMatchingExportSales(allSales) {
+        const periodType = this._exportPeriodType || 'day';
+        const statusFilter = document.getElementById('exp-filter-status')?.value || 'completed';
+        const payFilter = document.getElementById('exp-filter-pay')?.value || 'all';
+
+        return (allSales || []).filter(s => {
+            if (!s) return false;
+            // Filtro de estado
+            if (statusFilter === 'completed' && s.voided) return false;
+
+            // Filtro de medio de pago
+            if (payFilter !== 'all' && s.payment_type !== payFilter) return false;
+
+            // Filtro de fecha en hora local argentina
+            const saleDateStr = Utils.toArgentinaDateStr(s.created_at);
+            if (!saleDateStr) return false;
+
+            if (periodType === 'day') {
+                const dayVal = document.getElementById('exp-input-day')?.value || Utils.todayStr();
+                return saleDateStr === dayVal;
+            } else if (periodType === 'range') {
+                const startVal = document.getElementById('exp-input-start')?.value || '';
+                const endVal = document.getElementById('exp-input-end')?.value || '';
+                if (startVal && saleDateStr < startVal) return false;
+                if (endVal && saleDateStr > endVal) return false;
+                return true;
+            } else if (periodType === 'month') {
+                const mVal = parseInt(document.getElementById('exp-input-month')?.value ?? new Date().getMonth(), 10);
+                const yVal = parseInt(document.getElementById('exp-input-year')?.value ?? new Date().getFullYear(), 10);
+                const ym = Utils.getArgentinaYearMonth(new Date(s.created_at));
+                return ym.month === mVal && ym.year === yVal;
+            }
+            return true;
+        });
+    },
+
+    updateExportPreview() {
+        const allSales = this._cachedSalesForExport || [];
+        const matching = this.getMatchingExportSales(allSales);
+
+        const countEl = document.getElementById('exp-preview-count');
+        const totalEl = document.getElementById('exp-preview-total');
+        const btn = document.getElementById('btn-do-export');
+
+        const totalSum = matching
+            .filter(s => !s.voided)
+            .reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+
+        if (countEl) countEl.textContent = matching.length;
+        if (totalEl) totalEl.textContent = Utils.currency(totalSum);
+
+        if (btn) {
+            btn.disabled = (matching.length === 0);
+            if (matching.length === 0) {
+                btn.title = "No se encontraron ventas con los filtros indicados";
+            } else {
+                btn.title = `Descargar ${matching.length} venta(s)`;
+            }
+        }
+    },
+
+    async executeExport() {
+        const btn = document.getElementById('btn-do-export');
+        const origText = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Generando archivo...';
+        }
+
+        try {
+            const allSales = this._cachedSalesForExport || (await DB.getSales());
+            const matching = this.getMatchingExportSales(allSales);
+
+            if (!matching.length) {
+                if (typeof Toast !== 'undefined') Toast.show('No hay ventas para exportar con los filtros seleccionados', 'warning');
+                else alert('No hay ventas para exportar con los filtros seleccionados');
+                if (btn) { btn.disabled = false; btn.innerHTML = origText; }
+                return;
+            }
+
+            const detailType = document.getElementById('exp-detail-type')?.value || 'summary';
+            const periodType = this._exportPeriodType || 'day';
+
+            // Determinar sufijo para nombre de archivo
+            let fileSuffix = '';
+            if (periodType === 'day') {
+                const d = document.getElementById('exp-input-day')?.value || Utils.todayStr();
+                fileSuffix = `dia_${d}`;
+            } else if (periodType === 'range') {
+                const s = document.getElementById('exp-input-start')?.value || 'inicio';
+                const e = document.getElementById('exp-input-end')?.value || 'fin';
+                fileSuffix = `periodo_${s}_al_${e}`;
+            } else {
+                const m = parseInt(document.getElementById('exp-input-month')?.value ?? new Date().getMonth(), 10) + 1;
+                const y = document.getElementById('exp-input-year')?.value ?? new Date().getFullYear();
+                fileSuffix = `mes_${String(m).padStart(2, '0')}_${y}`;
+            }
+
+            const filename = `ventas_${fileSuffix}_${detailType === 'items' ? 'detallado' : 'resumen'}.csv`;
+            let rows = [];
+
+            if (detailType === 'items') {
+                rows.push([
+                    'Nro Venta', 'Fecha', 'Hora', 'Cliente', 'Producto', 
+                    'Cantidad', 'Precio Unitario ($)', 'Descuento', 'Subtotal ($)', 
+                    'Total Venta ($)', 'Medio de Pago', 'Facturada', 'Estado Venta'
+                ]);
+
+                // Obtener items de las ventas seleccionadas
+                const saleIds = matching.map(s => s.id);
+                let allItems = [];
+                try {
+                    if (saleIds.length <= 100) {
+                        const { data } = await DB.client.from('sale_items').select('*').in('sale_id', saleIds).eq('admin_id', DB._adminId());
+                        allItems = data || [];
+                    } else {
+                        for (let i = 0; i < saleIds.length; i += 100) {
+                            const chunk = saleIds.slice(i, i + 100);
+                            const { data } = await DB.client.from('sale_items').select('*').in('sale_id', chunk).eq('admin_id', DB._adminId());
+                            if (data) allItems.push(...data);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Fallo consulta selectiva de sale_items, recurriendo a getSaleItems():", e);
+                    allItems = await DB.getSaleItems();
+                }
+
+                matching.forEach(s => {
+                    const sItems = allItems.filter(it => it.sale_id === s.id);
+                    const fecha = Utils.dateShort(s.created_at);
+                    const hora = Utils.time(s.created_at);
+                    const cliente = s.client_name || 'Consumidor Final';
+                    const pago = Utils.paymentLabel ? Utils.paymentLabel(s.payment_type) : s.payment_type;
+                    const facturada = s.invoiced ? 'SI' : 'NO';
+                    const estado = s.voided ? 'ANULADA' : 'COMPLETADA';
+                    const totalVenta = parseFloat(s.total || 0).toFixed(2);
+
+                    if (sItems.length > 0) {
+                        sItems.forEach(it => {
+                            const qty = parseFloat(it.quantity) || 0;
+                            const unitPrice = parseFloat(it.unit_price) || 0;
+                            let subtotal = qty * unitPrice;
+                            let descText = 'Sin desc.';
+                            if (it.discount_type === 'percentage') {
+                                const dVal = parseFloat(it.discount_value) || 0;
+                                subtotal -= subtotal * (dVal / 100);
+                                descText = `${dVal}%`;
+                            } else if (it.discount_type === 'amount') {
+                                const dVal = parseFloat(it.discount_value) || 0;
+                                subtotal -= dVal;
+                                descText = `$${dVal}`;
+                            }
+                            rows.push([
+                                `#${s.id.slice(-4)}`,
+                                fecha,
+                                hora,
+                                cliente,
+                                it.product_name,
+                                qty,
+                                unitPrice.toFixed(2),
+                                descText,
+                                Math.max(0, subtotal).toFixed(2),
+                                totalVenta,
+                                pago,
+                                facturada,
+                                estado
+                            ]);
+                        });
+                    } else {
+                        rows.push([
+                            `#${s.id.slice(-4)}`,
+                            fecha,
+                            hora,
+                            cliente,
+                            'Venta sin detalle registrado',
+                            1,
+                            totalVenta,
+                            'Sin desc.',
+                            totalVenta,
+                            totalVenta,
+                            pago,
+                            facturada,
+                            estado
+                        ]);
+                    }
+                });
+            } else {
+                rows.push([
+                    'Nro Venta', 'Fecha', 'Hora', 'Cliente', 
+                    'Total ($)', 'Medio de Pago', 'Facturada', 'Estado'
+                ]);
+
+                matching.forEach(s => {
+                    const fecha = Utils.dateShort(s.created_at);
+                    const hora = Utils.time(s.created_at);
+                    const cliente = s.client_name || 'Consumidor Final';
+                    const total = parseFloat(s.total || 0).toFixed(2);
+                    const pago = Utils.paymentLabel ? Utils.paymentLabel(s.payment_type) : s.payment_type;
+                    const facturada = s.invoiced ? 'SI' : 'NO';
+                    const estado = s.voided ? 'ANULADA' : 'COMPLETADA';
+
+                    rows.push([
+                        `#${s.id.slice(-4)}`,
+                        fecha,
+                        hora,
+                        cliente,
+                        total,
+                        pago,
+                        facturada,
+                        estado
+                    ]);
+                });
+            }
+
+            Utils.exportToCsv(filename, rows);
+            Modal.close();
+            if (typeof Toast !== 'undefined') Toast.show(`Archivo "${filename}" descargado con éxito (${matching.length} ventas)`, 'success');
+        } catch (err) {
+            console.error("Error al exportar ventas:", err);
+            if (typeof Toast !== 'undefined') Toast.show('Error al generar la exportación de ventas', 'danger');
+            else alert('Error al exportar ventas');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = origText; }
         }
     },
 
